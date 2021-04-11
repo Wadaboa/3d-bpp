@@ -2,3 +2,5 @@ numpy==1.20.2
 pandas==1.2.3
 jupyter==1.0.0
 ortools==8.2.8710
+matplotlib==3.4.1
+ipympl==0.7.0
