@@ -4,3 +4,4 @@ jupyter==1.0.0
 ortools==8.2.8710
 matplotlib==3.4.1
 ipympl==0.7.0
+rectpack==0.2.1
