@@ -67,11 +67,19 @@ def generate_superitems(order, pallet_dims):
         (final_superitems.height <= pallet_height)
     ].reset_index(drop=True)
     
-    ws = final_superitems.lenght.tolist()
-    ds = final_superitems.width.tolist()
-    hs = final_superitems.height.tolist()
+    ws = final_superitems.lenght.values
+    ds = final_superitems.width.values
+    hs = final_superitems.height.values
 
     return final_superitems, ws, ds, hs
+
+def select_superitems_group(superitems, ids):
+    keys = np.array(list(ids.keys()), dtype=int)
+    sub_superitems = superitems.iloc[keys]
+    sub_ws = sub_superitems.lenght.values
+    sub_ds = sub_superitems.width.values
+    sub_hs = sub_superitems.height.values
+    return sub_superitems, sub_ws, sub_ds, sub_hs
 
 
 def items_assignment(superitems):
@@ -82,3 +90,15 @@ def items_assignment(superitems):
         for i in utils.flatten(superitems.loc[s, "items"]):
             fsi[s, i] = 1
     return fsi
+
+def select_fsi_group(fsi, ids):
+    keys = np.array(list(ids.keys()), dtype=int)
+    sub_items = np.nonzero(fsi[keys])[1].tolist()
+    item_ids = dict(zip(sub_items, range(len(sub_items))))
+    print(item_ids)
+    sub_fsi = np.zeros((len(keys), len(sub_items)), dtype=int)
+    for i in item_ids:
+        for s in keys:
+            if fsi[s, i] == 1:
+                sub_fsi[ids[s], item_ids[i]] = 1
+    return sub_fsi

@@ -12,17 +12,17 @@ def half_gaussian(scale, size=1, reduction_factor=1):
 
 class ProductDataset():
 
-	def __init__(self, products_path, num_products, max_lenght, max_width, max_height, max_weight):
+	def __init__(self, products_path, num_products, max_lenght, max_width, max_height, max_weight, force_overload=False):
 		self.products_path = products_path
 		self.num_products = num_products  
 		self.max_lenght = max_lenght
 		self.max_width = max_width
 		self.max_height = max_height
 		self.max_weight = max_weight
-		self.products = self._load_products()
+		self.products = self._load_products(force_overload)
 	
-	def _load_products(self):
-		if not os.path.exists(self.products_path):
+	def _load_products(self, force_overload=False):
+		if not os.path.exists(self.products_path) or force_overload:
 			products = self._gen_products()
 			products.to_pickle(self.products_path)
 		else:

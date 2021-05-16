@@ -86,15 +86,77 @@ def warm_start(num_superitems, groups, pallet_lenght, pallet_width):
 
 		layers = maxrects(rects, pallet_lenght, pallet_width)
 
-		superitems_in_layer = np.full((num_superitems, len(layers)), False)
+		superitems_in_layer = np.zeros((num_superitems, len(layers)), dtype=int)
+		layer_heights = np.zeros((len(layers),), dtype=int)
 		for l, layer in enumerate(layers):
 			superitems_ids = []
 			for rect in layer:
 				superitems_ids += [rect[0]]
-				superitems_in_layer[rect[0], l] = True
-			ol += [group[group.superitem_id.isin(superitems_ids)].height.max()]
+				superitems_in_layer[rect[0], l] = 1
+			layer_heights[l] = group[group.superitem_id.isin(superitems_ids)].height.max()
 
 		zsl += [superitems_in_layer]
+		ol += [layer_heights]
 	
-	zsl = np.concatenate(zsl, axis=1).astype(int)
+	zsl = np.concatenate(zsl, axis=1)
+	ol = np.concatenate(ol)
+	return zsl, ol
+
+
+def single_item_layers(group):
+	ol = np.zeros((len(group), ), dtype=int)
+	zsl = np.eye(len(group), dtype=int)
+	for i, item in group.iterrows():
+		ol[i] = item.height
+	return ol, zsl
+
+
+def warm_start_groups(groups, pallet_lenght, pallet_width, add_single=True):
+	ol, zsl, ids = [], [], []
+	for group in groups:
+		rects = []
+		rect_ids = dict()
+		for i, row in group.iterrows():
+			rects += [(row.lenght, row.width, row.superitem_id)]
+			rect_ids[row.superitem_id] = i
+
+		layers = maxrects(rects, pallet_lenght, pallet_width)
+
+		superitems_in_layer = np.zeros((len(rects), len(layers)), dtype=int)
+		layer_heights = np.zeros((len(layers), ), dtype=int)
+		for l, layer in enumerate(layers):
+			superitems_ids = []
+			for rect in layer:
+				superitems_ids += [rect[0]]
+				superitems_in_layer[rect_ids[rect[0]], l] = 1
+			layer_heights[l] = group[group.superitem_id.isin(superitems_ids)].height.max()
+
+		if add_single and len(group) > 1:
+			ol_single, zsl_single = single_item_layers(group)
+			superitems_in_layer = np.concatenate((superitems_in_layer, zsl_single), axis=1)
+			layer_heights = np.concatenate((layer_heights, ol_single))
+
+		ol.append(layer_heights)
+		zsl.append(superitems_in_layer)
+		ids.append(rect_ids)
+	
+	return zsl, ol, ids
+
+
+def warm_start_no_groups(superitems, pallet_lenght, pallet_width):
+	rects = []
+	for _, row in superitems.iterrows():
+		rects += [(row.lenght, row.width, row.name)]
+
+	layers = maxrects(rects, pallet_lenght, pallet_width)
+
+	ol = np.zeros((len(layers),), dtype=int)
+	zsl = np.zeros((len(superitems), len(layers)), dtype=int)
+	for l, layer in enumerate(layers):
+		superitems_ids = []
+		for rect in layer:
+			superitems_ids += [rect[0]]
+			zsl[rect[0], l] = 1
+		ol[l] = superitems[superitems.index.isin(superitems_ids)].height.max()
+
 	return zsl, ol
