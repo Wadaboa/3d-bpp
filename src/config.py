@@ -5,6 +5,8 @@ pallet_load, container_load = 2490, 26480 # kg
 
 # Product dimension ranges
 num_products = 1000
+min_lenght, min_width, min_height = 50, 50, 50 # mm
+min_weight = 2 # kg
 max_product_height = container_height - pallet_height
 
 RANDOM_SEED = 42
