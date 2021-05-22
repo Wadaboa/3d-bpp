@@ -58,7 +58,9 @@ class ProductDataset():
 		indexes = np.arange(0, len(dims), 1)
 		dims = dims[np.random.choice(indexes, size=self.num_products)]
 
-		return pd.DataFrame(dims, columns=["lenght", "width", "height", "weight"])
+		df = pd.DataFrame(dims, columns=["lenght", "width", "height", "weight"])
+		df["volume"] = df.lenght * df.width * df.height
+		return df
 
 	def get_order(self, ordered_products):
 		order = self.products.sample(ordered_products, replace=True)

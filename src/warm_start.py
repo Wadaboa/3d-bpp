@@ -40,7 +40,7 @@ def get_initial_groups(superitems, tol=0):
                 ]
                 indexes_to_remove += to_remove.index.tolist()
 
-        final_groups += [sorted_group.drop(index=indexes_to_remove)]
+        final_groups += [sorted_group.drop(index=indexes_to_remove).reset_index(drop=True)]
 
     return final_groups
 
@@ -128,6 +128,9 @@ def warm_start_groups(groups, pallet_lenght, pallet_width, add_single=True):
 			superitems_ids = []
 			for rect in layer:
 				superitems_ids += [rect[0]]
+				#print(rect_ids)
+				#print(rect)
+				#print(l)
 				superitems_in_layer[rect_ids[rect[0]], l] = 1
 			layer_heights[l] = group[group.superitem_id.isin(superitems_ids)].height.max()
 
