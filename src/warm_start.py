@@ -29,7 +29,7 @@ def get_initial_groups(superitems, tol=0):
         group.loc[:, "flattened_items"] = group["items"].map(lambda l: list(utils.flatten(l)))
         group.loc[:, "num_items"] = group["flattened_items"].str.len()
         sorted_group = group.sort_values(
-            by=["num_items", "stacked"], ascending=False
+            by=["num_items", "vstacked"], ascending=False
         ).reset_index().rename(columns={"index": "superitem_id"})
         indexes_to_remove = []
         for i, row in sorted_group.iterrows():
@@ -77,32 +77,6 @@ def maxrects(rects, bin_lenght, bin_width):
 	return bins
 
 
-def warm_start(num_superitems, groups, pallet_lenght, pallet_width):
-	ol, zsl = [], []
-	for group in groups:
-		rects = []
-		for _, row in group.iterrows():
-			rects += [(row.lenght, row.width, row.superitem_id)]
-
-		layers = maxrects(rects, pallet_lenght, pallet_width)
-
-		superitems_in_layer = np.zeros((num_superitems, len(layers)), dtype=int)
-		layer_heights = np.zeros((len(layers),), dtype=int)
-		for l, layer in enumerate(layers):
-			superitems_ids = []
-			for rect in layer:
-				superitems_ids += [rect[0]]
-				superitems_in_layer[rect[0], l] = 1
-			layer_heights[l] = group[group.superitem_id.isin(superitems_ids)].height.max()
-
-		zsl += [superitems_in_layer]
-		ol += [layer_heights]
-	
-	zsl = np.concatenate(zsl, axis=1)
-	ol = np.concatenate(ol)
-	return zsl, ol
-
-
 def single_item_layers(group):
 	ol = np.zeros((len(group), ), dtype=int)
 	zsl = np.eye(len(group), dtype=int)
@@ -111,8 +85,13 @@ def single_item_layers(group):
 	return ol, zsl
 
 
-def warm_start_groups(groups, pallet_lenght, pallet_width, add_single=True):
-	ol, zsl, ids = [], [], []
+def warm_start_groups(groups, num_total_superitems, pallet_lenght, pallet_width, add_single=True, split_by_group=True):
+	'''
+	Given a list of DataFrames of superitems, return the layer heights
+	and superitems to layer assignments for each group or all the groups, 
+	based on the maxrects algorithm
+	'''
+	groups_info, layer_pool = [], []
 	for group in groups:
 		rects = []
 		rect_ids = dict()
@@ -122,31 +101,46 @@ def warm_start_groups(groups, pallet_lenght, pallet_width, add_single=True):
 
 		layers = maxrects(rects, pallet_lenght, pallet_width)
 
-		superitems_in_layer = np.zeros((len(rects), len(layers)), dtype=int)
-		layer_heights = np.zeros((len(layers), ), dtype=int)
+		num_superitems = num_total_superitems if not split_by_group else len(rects) 
+		zsl = np.zeros((num_superitems, len(layers)), dtype=int)
+		ol = np.zeros((len(layers), ), dtype=int)
 		for l, layer in enumerate(layers):
-			superitems_ids = []
+			ids, coords = [], []
 			for rect in layer:
-				superitems_ids += [rect[0]]
-				#print(rect_ids)
-				#print(rect)
-				#print(l)
-				superitems_in_layer[rect_ids[rect[0]], l] = 1
-			layer_heights[l] = group[group.superitem_id.isin(superitems_ids)].height.max()
+				s = rect_ids[rect[0]] if split_by_group else rect[0]
+				ids += [rect[0]]
+				zsl[s, l] = 1
+				coords += [(rect[1], rect[2])]
+			ol[l] = group[group.superitem_id.isin(ids)].height.max()
+			layer_pool += [(ol[l], ids, np.array(coords))]
 
+		inv_rect_ids = {v:k for k, v in rect_ids.items()}
 		if add_single and len(group) > 1:
 			ol_single, zsl_single = single_item_layers(group)
-			superitems_in_layer = np.concatenate((superitems_in_layer, zsl_single), axis=1)
-			layer_heights = np.concatenate((layer_heights, ol_single))
+			zsl = np.concatenate((zsl, zsl_single), axis=1)
+			ol = np.concatenate((ol, ol_single))
+			for i, h in enumerate(ol_single):
+				layer_pool += [(
+					h, [inv_rect_ids[i]], np.array([(0, 0)])
+				)]
 
-		ol.append(layer_heights)
-		zsl.append(superitems_in_layer)
-		ids.append(rect_ids)
-	
-	return zsl, ol, ids
+		groups_info += [{'zsl': zsl, 'ol': ol, 'ids': rect_ids}]
+
+	if not split_by_group:
+		groups_info = [{
+			'zsl': np.concatenate((g['zsl'] for g in groups_info), axis=1),
+			'ol': np.concatenate([g['ol'] for g in groups_info]),
+			'ids': {k: v for g in groups_info for k, v in g['ids'].items()},
+		}]
+
+	return groups_info, layer_pool
 
 
 def warm_start_no_groups(superitems, pallet_lenght, pallet_width):
+	'''
+	Given the whole DataFrame of superitems, return the layer heights
+	and superitems to layer assignments based on the maxrects algorithm
+	'''
 	rects = []
 	for _, row in superitems.iterrows():
 		rects += [(row.lenght, row.width, row.name)]

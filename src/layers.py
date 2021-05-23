@@ -11,7 +11,7 @@ def generate_superitems(order, pallet_dims, max_stacked_items=4):
     superitems_horizontal = []
     same_dims = order.reset_index().groupby(
         ['width', 'lenght', 'height'], as_index=False
-    ).agg({'index': list, 'id': list})
+    ).agg({'index': list})
 
     two_slices, four_slices = [], []
     for _, dims in same_dims.iterrows():
@@ -21,16 +21,14 @@ def generate_superitems(order, pallet_dims, max_stacked_items=4):
     
     for p1, p2 in tqdm(two_slices, desc="Generating horizontal 2-items superitems"):
         indexes = [p1.name, p2.name]
-        ids = [p1["id"], p2["id"]]
         superitems_horizontal += [
-            [indexes, ids, p1["lenght"] * 2, p1["width"], p1["height"], p1["weight"] + p2["weight"], p1["volume"] + p2["volume"], False],
-            [indexes, ids, p1["lenght"], p1["width"] * 2, p1["height"], p1["weight"] + p2["weight"], p1["volume"] + p2["volume"], False]
+            [indexes, p1["lenght"] * 2, p1["width"], p1["height"], p1["weight"] + p2["weight"], p1["volume"] + p2["volume"], False],
+            [indexes, p1["lenght"], p1["width"] * 2, p1["height"], p1["weight"] + p2["weight"], p1["volume"] + p2["volume"], False]
         ]
 
     for p1, p2, p3, p4 in tqdm(four_slices, desc="Generating horizontal 4-items superitems"):
         superitems_horizontal += [[
             [p1.name, p2.name, p3.name, p4.name],
-            [p1["id"], p2["id"], p3["id"], p4["id"]],
             p1["lenght"] * 2, 
             p1["width"] * 2, 
             p1["height"],
@@ -39,36 +37,35 @@ def generate_superitems(order, pallet_dims, max_stacked_items=4):
             False
         ]]
     
-    items = order.reset_index().rename(columns={"index": "items"})
-    items["id"] = items["id"].apply(lambda x: [x])
+    items = order.reset_index().drop(columns="id").rename(columns={"index": "items"})
     items["items"] = items["items"].apply(lambda x: [x])
-    items["stacked"] = [False] * len(items)
+    items["vstacked"] = [False] * len(items)
     superitems_horizontal = pd.DataFrame(superitems_horizontal, columns=items.columns)
-    items_superitems = pd.concat([items, superitems_horizontal]).sort_values(
-        ["width", "lenght", "height"]
-    ).reset_index(drop=True)
+    items_superitems = pd.concat([items, superitems_horizontal])
+    items_superitems["lw"] = items_superitems["width"] * items_superitems["lenght"]
+    items_superitems = items_superitems.sort_values(["lw", "height"]).reset_index(drop=True)
 
-    for _ in range(max_stacked_items):
-        superitems_vertical = []
-        for a, i in tqdm(items_superitems.iterrows(), desc="Generating vertical superitems"):
-            for _, j in items_superitems.iloc[a + 1:].iterrows():
-                if ((len(set(utils.flatten(i["items"])).intersection(set(utils.flatten(j["items"])))) == 0) and 
-                    (j["width"] * j["lenght"] >= i["width"] * i["lenght"]) and
-                    (i["width"] * i["lenght"] >= 0.7 * j["width"] * j["lenght"])):
-                        superitems_vertical += [[
-                            [i["items"], j["items"]],
-                            [i["id"], j["id"]],
-                            max(i["lenght"], j["lenght"]), 
-                            max(i["width"], j["width"]), 
-                            i["height"] + j["height"],
-                            i["weight"] + j["weight"],
-                            i["volume"] + j["volume"],
-                            True
-                        ]]
-                        break
-        
-        items_superitems = items_superitems.append(pd.DataFrame(superitems_vertical, columns=items.columns), ignore_index=True)
+    slices = []
+    for s in range(2, max_stacked_items + 1):
+        slices += [
+            tuple(items_superitems.iloc[i + j] for j in range(s)) 
+            for i in range(0, len(items_superitems) - (s - 1), s)
+        ]
+    
+    for slice in slices:
+        if slice[0]["lw"] >= 0.7 * slice[-1]["lw"]:
+            items_superitems = items_superitems.append({
+                "items": [i["items"] for i in slice],
+                "lenght": max(i["lenght"] for i in slice), 
+                "width": max(i["width"] for i in slice), 
+                "height": sum(i["height"] for i in slice),
+                "weight": sum(i["weight"] for i in slice),
+                "volume": sum(i["volume"] for i in slice),
+                "lw": slice[-1]["lw"],
+                "vstacked": True
+            }, ignore_index=True)
 
+    items_superitems = items_superitems.drop(columns="lw")
     pallet_lenght, pallet_width, pallet_height = pallet_dims
     items_superitems = items_superitems[
         (items_superitems.lenght <= pallet_lenght) &
@@ -109,4 +106,4 @@ def select_fsi_group(fsi, ids):
         for s in keys:
             if fsi[s, i] == 1:
                 sub_fsi[ids[s], item_ids[i]] = 1
-    return sub_fsi
+    return sub_fsi, item_ids
