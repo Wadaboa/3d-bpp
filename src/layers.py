@@ -73,14 +73,93 @@ class LayerPool():
                 break
         return present
 
+    def get_item_ids(self, superitems):
+        item_ids = []
+        for layer in self.layers:
+            item_ids += layer.get_item_ids(superitems)
+        return item_ids
+
+    def get_densities(self, superitems, W, D):
+        return [layer.get_density(superitems=superitems, W=W, D=D) for layer in self.layers]
+
+    def select_layers(self, superitems, W, D, min_density=0.5):
+        # Sort layers by densities and keep only those with a 
+        # density greater than or equal to the given minimum
+        densities = self.get_densities(superitems, W, D)
+        sorted_layers = sorted(self.layers, key=densities, reverse=True)
+        sorted_layers = LayerPool(
+            layers=[l for d, l in zip(densities, sorted_layers) if d >= min_density]
+        )
+        
+        # Discard layers after all items are covered 
+        all_item_ids = sorted_layers.get_item_ids(superitems)
+        item_coverage = dict(zip(all_item_ids, [False] * len(all_item_ids)))
+        selected_layers = LayerPool()
+        for layer in sorted_layers:
+            # Stop when all items are covered
+            if all(list(item_coverage.values())):
+                break
+            
+            # Update coverage
+            item_ids = layer.get_item_ids(superitems)
+            for item in item_ids:
+                item_coverage[item] = True
+
+            # Add the current layer to the pool
+            # of selected layers
+            selected_layers.add(layer)
+
+        return selected_layers
+
+    def replace_items(self, superitems, max_item_coverage=3):
+        all_item_ids = self.get_item_ids(superitems)
+        item_coverage = dict(zip(all_item_ids, [0] * len(all_item_ids)))
+        selected_layers = LayerPool()
+        for layer in self.layers:
+            to_select = True
+            item_ids = layer.get_item_ids(superitems)
+            
+            # If at least one item in the layer was already selected
+            # more times than the maximum allowed value, then such layer
+            # is to be discarded
+            for item in item_ids:
+                if item_coverage[item] >= max_item_coverage:
+                    to_select = False
+            
+            # If the layer is selected, increase item coverage
+            # for each item in such layer and add it to the pool
+            # of selected layers
+            if to_select:
+                selected_layers.add(layer)
+                for item in item_ids:
+                    item_coverage[item] += 1
+
+            ################################ TODO
+            # We also let each selected layer to have a maximum of 3
+            # items that are covered using the previously selected layers
+            # ##############################
+        
+        return selected_layers
+
+
     def __str__(self):
         return f"LayerPool(layers={self.layers})"
     
     def __repr__(self):
         return self.__str__()
 
+    def __getitem__(self, i):
+        return self.layers[i]
 
-def generate_superitems(order, pallet_dims, max_stacked_items=4):
+    def __setitem__(self, i, e):
+        assert isinstance(e, Layer), (
+            "The given layer should be an instance of the Layer class"
+        )
+        self.layers[i] = e
+
+
+
+def generate_superitems(order, pallet_dims, max_stacked_items=2):
     superitems_horizontal = []
     same_dims = order.reset_index().groupby(
         ['width', 'lenght', 'height'], as_index=False
