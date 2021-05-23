@@ -2,7 +2,7 @@ import numpy as np
 from rectpack import newPacker, PackingMode, PackingBin, SORT_AREA
 from rectpack.maxrects import MaxRectsBaf
 
-from . import utils
+from . import utils, layers
 
 
 def get_initial_groups(superitems, tol=0): 
@@ -26,8 +26,6 @@ def get_initial_groups(superitems, tol=0):
 
     final_groups = []
     for group in groups:
-        group.loc[:, "flattened_items"] = group["items"].map(lambda l: list(utils.flatten(l)))
-        group.loc[:, "num_items"] = group["flattened_items"].str.len()
         sorted_group = group.sort_values(
             by=["num_items", "vstacked"], ascending=False
         ).reset_index().rename(columns={"index": "superitem_id"})
@@ -92,19 +90,21 @@ def warm_start_groups(groups, num_total_superitems, pallet_lenght, pallet_width,
 	based on the maxrects algorithm
 	'''
 	groups_info, layer_pool = [], []
+	superitem_heights = dict()
 	for group in groups:
 		rects = []
 		rect_ids = dict()
 		for i, row in group.iterrows():
 			rects += [(row.lenght, row.width, row.superitem_id)]
 			rect_ids[row.superitem_id] = i
+			superitem_heights[row.superitem_id] = row.height
 
-		layers = maxrects(rects, pallet_lenght, pallet_width)
+		initial_layers = maxrects(rects, pallet_lenght, pallet_width)
 
 		num_superitems = num_total_superitems if not split_by_group else len(rects) 
-		zsl = np.zeros((num_superitems, len(layers)), dtype=int)
-		ol = np.zeros((len(layers), ), dtype=int)
-		for l, layer in enumerate(layers):
+		zsl = np.zeros((num_superitems, len(initial_layers)), dtype=int)
+		ol = np.zeros((len(initial_layers), ), dtype=int)
+		for l, layer in enumerate(initial_layers):
 			ids, coords = [], []
 			for rect in layer:
 				s = rect_ids[rect[0]] if split_by_group else rect[0]
@@ -112,26 +112,34 @@ def warm_start_groups(groups, num_total_superitems, pallet_lenght, pallet_width,
 				zsl[s, l] = 1
 				coords += [(rect[1], rect[2])]
 			ol[l] = group[group.superitem_id.isin(ids)].height.max()
-			layer_pool += [(ol[l], ids, np.array(coords))]
+			layer_pool += [layers.Layer(ol[l], ids, np.array(coords))]
 
 		inv_rect_ids = {v:k for k, v in rect_ids.items()}
-		if add_single and len(group) > 1:
+		if add_single and len(group) > 1 and split_by_group:
 			ol_single, zsl_single = single_item_layers(group)
 			zsl = np.concatenate((zsl, zsl_single), axis=1)
 			ol = np.concatenate((ol, ol_single))
 			for i, h in enumerate(ol_single):
-				layer_pool += [(
-					h, [inv_rect_ids[i]], np.array([(0, 0)])
+				layer_pool += [
+					layers.Layer(h, [inv_rect_ids[i]], np.array([(0, 0)])
 				)]
 
 		groups_info += [{'zsl': zsl, 'ol': ol, 'ids': rect_ids}]
 
 	if not split_by_group:
 		groups_info = [{
-			'zsl': np.concatenate((g['zsl'] for g in groups_info), axis=1),
+			'zsl': np.concatenate([g['zsl'] for g in groups_info], axis=1),
 			'ol': np.concatenate([g['ol'] for g in groups_info]),
 			'ids': {k: v for g in groups_info for k, v in g['ids'].items()},
 		}]
+		if add_single:
+			groups_info[0]['zsl'] = np.concatenate(
+				[groups_info[0]['zsl'], np.eye(num_total_superitems, dtype=int)], axis=1
+			)
+			groups_info[0]['ol'] = np.concatenate([
+				groups_info[0]['ol'], 
+				[superitem_heights[s] for s in range(num_total_superitems)]
+			])
 
 	return groups_info, layer_pool
 
@@ -145,11 +153,11 @@ def warm_start_no_groups(superitems, pallet_lenght, pallet_width):
 	for _, row in superitems.iterrows():
 		rects += [(row.lenght, row.width, row.name)]
 
-	layers = maxrects(rects, pallet_lenght, pallet_width)
+	initial_layers = maxrects(rects, pallet_lenght, pallet_width)
 
-	ol = np.zeros((len(layers),), dtype=int)
-	zsl = np.zeros((len(superitems), len(layers)), dtype=int)
-	for l, layer in enumerate(layers):
+	ol = np.zeros((len(initial_layers),), dtype=int)
+	zsl = np.zeros((len(superitems), len(initial_layers)), dtype=int)
+	for l, layer in enumerate(initial_layers):
 		superitems_ids = []
 		for rect in layer:
 			superitems_ids += [rect[0]]

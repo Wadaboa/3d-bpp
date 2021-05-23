@@ -7,6 +7,36 @@ from tqdm import tqdm
 from . import utils
 
 
+class Layer():
+
+    def __init__(self, height, superitem_ids, coords):
+        self.height = height
+        self.superitem_ids = superitem_ids
+        self.coords = coords
+
+    def get_superitems(self, superitems):
+        return superitems.iloc[self.superitem_ids]
+
+    def get_item_ids(self, superitems):
+        return list(utils.flatten(self.get_superitems(superitems).flattened_items.to_list()))
+    
+    def get_items(self, order, superitems):
+        item_ids = self.get_item_ids(superitems)
+        return order.iloc[item_ids]
+
+    def get_volume(self, superitems):
+        return sum(superitems.iloc[s].volume for s in self.superitem_ids)
+
+    def get_density(self, superitems, W, D):
+        return self.get_volume(superitems) / W * D * self.height
+
+    def __str__(self):
+        return f"Layer(height={self.height}, ids={self.superitem_ids})"
+
+    def __repr__(self):
+        return self.__str__()
+
+
 def generate_superitems(order, pallet_dims, max_stacked_items=4):
     superitems_horizontal = []
     same_dims = order.reset_index().groupby(
@@ -72,6 +102,9 @@ def generate_superitems(order, pallet_dims, max_stacked_items=4):
         (items_superitems.width <= pallet_width) &
         (items_superitems.height <= pallet_height)
     ].reset_index(drop=True)
+
+    items_superitems.loc[:, "flattened_items"] = items_superitems["items"].map(lambda l: list(utils.flatten(l)))
+    items_superitems.loc[:, "num_items"] = items_superitems["flattened_items"].str.len()
     
     ws = items_superitems.lenght.values
     ds = items_superitems.width.values
