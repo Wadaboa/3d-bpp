@@ -30,9 +30,52 @@ class Layer():
     def get_density(self, superitems, W, D):
         return self.get_volume(superitems) / W * D * self.height
 
+    def map_superitem_ids(self, mapping):
+        self.superitem_ids = [mapping[s] for s in self.superitem_ids]
+
     def __str__(self):
         return f"Layer(height={self.height}, ids={self.superitem_ids})"
 
+    def __repr__(self):
+        return self.__str__()
+
+    
+class LayerPool():
+
+    def __init__(self, layers=None):
+        self.layers = layers or []
+
+    def add(self, layer):
+        assert isinstance(layer, Layer), (
+            "The given layer should be an instance of the Layer class"
+        )
+        self.layers.append(layer)
+
+    def add_pool(self, layer_pool):
+        assert isinstance(layer_pool, LayerPool), (
+            "The given set of layers should be an instance of the LayerPool class"
+        )
+        self.layers.extend(layer_pool.layers)
+
+    def map_superitem_ids(self, mapping):
+        for layer in self.layers:
+            layer.map_superitem_ids(mapping)
+
+    def is_present(self, layer):
+        assert isinstance(layer, Layer), (
+            "The given layer should be an instance of the Layer class"
+        )
+        present = False
+        for other_layer in self.layers:
+            if (utils.np_are_equal(layer.superitem_ids, other_layer.superitem_ids) and 
+                    utils.np_are_equal(layer.coords, other_layer.coords)):
+                present = True
+                break
+        return present
+
+    def __str__(self):
+        return f"LayerPool(layers={self.layers})"
+    
     def __repr__(self):
         return self.__str__()
 

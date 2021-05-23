@@ -1,5 +1,7 @@
 from collections.abc import Iterable
 
+import numpy as np
+
 
 def get_liquid_volume(dims):
     volume = 0
@@ -14,3 +16,9 @@ def flatten(l):
             yield from flatten(el)
         else:
             yield el
+
+
+def np_are_equal(a1, a2):
+    if a1.shape != a2.shape:
+        return False
+    return np.count_nonzero(a1 - a2) == 0

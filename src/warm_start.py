@@ -89,7 +89,8 @@ def warm_start_groups(groups, num_total_superitems, pallet_lenght, pallet_width,
 	and superitems to layer assignments for each group or all the groups, 
 	based on the maxrects algorithm
 	'''
-	groups_info, layer_pool = [], []
+	groups_info = []
+	layer_pool = layers.LayerPool()
 	superitem_heights = dict()
 	for group in groups:
 		rects = []
@@ -112,7 +113,9 @@ def warm_start_groups(groups, num_total_superitems, pallet_lenght, pallet_width,
 				zsl[s, l] = 1
 				coords += [(rect[1], rect[2])]
 			ol[l] = group[group.superitem_id.isin(ids)].height.max()
-			layer_pool += [layers.Layer(ol[l], ids, np.array(coords))]
+			layer_pool.add(
+				layers.Layer(ol[l], ids, np.array(coords))
+			)
 
 		inv_rect_ids = {v:k for k, v in rect_ids.items()}
 		if add_single and len(group) > 1 and split_by_group:
@@ -120,9 +123,9 @@ def warm_start_groups(groups, num_total_superitems, pallet_lenght, pallet_width,
 			zsl = np.concatenate((zsl, zsl_single), axis=1)
 			ol = np.concatenate((ol, ol_single))
 			for i, h in enumerate(ol_single):
-				layer_pool += [
-					layers.Layer(h, [inv_rect_ids[i]], np.array([(0, 0)])
-				)]
+				layer_pool.add(
+					layers.Layer(h, [inv_rect_ids[i]], np.array([(0, 0)]))
+				)
 
 		groups_info += [{'zsl': zsl, 'ol': ol, 'ids': rect_ids}]
 
