@@ -1,10 +1,19 @@
 from functools import partial
 
+def construct_bins(layer_pool, superitems, W, D, H, min_density=0.5):
+	last_bin_index = 0
+	bins = {last_bin_index: []}
+	for layer in layer_pool.select_layers(superitems, W, D, min_density=min_density):
+		placed = False
+		for bin in bins:
+			hb = sum(l.height for l in bins[bin])
+			hl = layer.height
+			if hb + hl <= H:
+				bins[bin].insert(0, layer)
+				placed = True
 
-def select_layers(superitems, layer_pool, W, D, min_density=0.5, max_item_reps=3):
-	densities = layer_pool.get_densities(superitems, W, D)
-	sorted_layers = sorted(layer_pool, key=densities, reverse=True)
-	sorted_layers = [l for d, l in zip(densities, sorted_layers) if d >= min_density]
-
-def replace_items(superitems, layer_pool):
-	for layer in layer_pool:
+		if not placed:
+			last_bin_index += 1
+			bins[last_bin_index] = [layer]
+	
+	return bins

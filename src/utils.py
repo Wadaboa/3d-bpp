@@ -1,6 +1,9 @@
+import itertools
 from collections.abc import Iterable
 
 import numpy as np
+import pandas as pd
+from tqdm import tqdm
 
 
 def get_liquid_volume(dims):
@@ -22,3 +25,80 @@ def np_are_equal(a1, a2):
     if a1.shape != a2.shape:
         return False
     return np.count_nonzero(a1 - a2) == 0
+
+
+def get_l0_lb(order, W, H, D):
+	return np.ceil(order.volume.sum() / (W * H * D))
+
+
+def get_l1_lb(order, W, H, D):
+
+	def get_j2(d1, bd1, d2, bd2):
+		return order[(order[d1] > (bd1 / 2)) & (order[d2] > (bd2 / 2))]
+
+	def get_js(j2, p, d, bd):
+		return j2[(j2[d] >= p) & (j2[d] <= (bd / 2))]
+	
+	def get_jl(j2, p, d, bd):
+		return j2[(j2[d] > (bd / 2)) & (j2[d] <= bd - p)]
+
+	def get_l1j2(d1, bd1, d2, bd2, d3, db3):
+		j2 = get_j2(d1, bd1, d2, bd2)
+		max_ab = -np.inf
+		for p in range(1, db3 // 2 + 1):
+			js = get_js(j2, p, d3, db3)
+			jl = get_jl(j2, p, d3, db3)
+			a = np.ceil((js[d2].sum() - (len(jl) * db3 - jl[d2].sum())) / db3)
+			b = np.ceil((len(js) - (np.floor((db3 - jl[d2].values) / p)).sum()) / np.floor(db3 / p))
+			if max(a, b) > max_ab:
+				max_ab = max(a, b)
+
+		return len(j2[j2[d2] > (db3 / 2)]) + max_ab
+
+	l1wh = get_l1j2("lenght", W, "width", H, "height", D)
+	l1wd = get_l1j2("lenght", W, "height", D, "width", H)
+	l1hd = get_l1j2("width", H, "height", D, "lenght", W)
+	return max(l1wh, l1wd, l1hd), l1wh, l1wd, l1hd
+
+
+def get_l2_lb(order, W, H, D):
+
+	def get_kv(p, q, d1, db1, d2, db2):
+		return order[(order[d1] > db1 - p) & (order[d2] > db2 - q)]
+	
+	def get_kl(kv, d1, db1, d2, db2):
+		kl = order[~order.isin(kv)].dropna()
+		return kl[(kl[d1] > (db1 / 2)) & (kl[d2] > (db2 / 2))]
+
+	def get_ks(kv, kl, p, q, d1, d2):
+		ks = order[~order.isin(pd.concat([kv, kl], axis=0))].dropna()
+		return ks[(ks[d1] >= p) & (ks[d2] >= q)]
+
+	def get_l2j2pq(p, q, l1, d1, db1, d2, db2, d3, db3):
+		kv = get_kv(p, q, d1, db1, d2, db2)
+		kl = get_kl(kv, d1, db1, d2, db2)
+		ks = get_ks(kv, kl, p, q, d1, d2)
+		
+		return l1 + max(0, np.ceil(
+			(pd.concat([kl, ks], axis=0).volume.sum() - (db3 * l1 - kv[d3].sum()) * db1 * db2) / 
+			(db1 * db2 * db3)
+		))
+
+	def get_l2j2(l1, d1, db1, d2, db2, d3, db3):
+		max_l2j2 = -np.inf
+		pq_combs = list(itertools.product(
+			list(range(1, db1 // 2 + 1)), 
+			list(range(1, db2 // 2 + 1))
+		))
+		for p, q in tqdm(pq_combs):
+			l2j2 = get_l2j2pq(p, q, l1, d1, db1, d2, db2, d3, db3)
+			if l2j2 > max_l2j2:
+				max_l2j2 = l2j2
+		return max_l2j2
+
+
+	_, l1wh, l1wd, l1hd = get_l1_lb(order, W, H, D)
+	l2wh = get_l2j2(l1wh, "lenght", W, "width", H, "height", D)
+	l2wd = get_l2j2(l1wd, "lenght", W, "height", D, "width", H)
+	l2hd = get_l2j2(l1hd, "width", H, "height", D, "lenght", W)
+	return max(l2wh, l2wd, l2hd), l2wh, l2wd, l2hd

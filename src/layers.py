@@ -25,10 +25,17 @@ class Layer():
         return order.iloc[item_ids]
 
     def get_volume(self, superitems):
-        return sum(superitems.iloc[s].volume for s in self.superitem_ids)
+        return self.get_superitems(superitems).volume.sum()
 
-    def get_density(self, superitems, W, D):
-        return self.get_volume(superitems) / W * D * self.height
+    def get_area(self, superitems):
+        s = self.get_superitems(superitems)
+        return (s.lenght * s.width).sum()
+
+    def get_density(self, superitems, W, D, two_dims=False):
+        return (
+            self.get_volume(superitems) / W * D * self.height if two_dims
+            else self.get_area(superitems) / W * D
+        )
 
     def map_superitem_ids(self, mapping):
         self.superitem_ids = [mapping[s] for s in self.superitem_ids]
@@ -80,13 +87,14 @@ class LayerPool():
         return item_ids
 
     def get_densities(self, superitems, W, D):
-        return [layer.get_density(superitems=superitems, W=W, D=D) for layer in self.layers]
+        return [layer.get_density(superitems=superitems, W=W, D=D, two_dims=True) for layer in self.layers]
 
     def select_layers(self, superitems, W, D, min_density=0.5):
         # Sort layers by densities and keep only those with a 
         # density greater than or equal to the given minimum
         densities = self.get_densities(superitems, W, D)
-        sorted_layers = sorted(self.layers, key=densities, reverse=True)
+        sorted_densities = np.array(densities).argsort()
+        sorted_layers = np.array(self.layers)[sorted_densities[::-1]]
         sorted_layers = LayerPool(
             layers=[l for d, l in zip(densities, sorted_layers) if d >= min_density]
         )
