@@ -89,6 +89,12 @@ class Item:
     def volume(self):
         return self.dimensions.volume
 
+    def get_items(self):
+        return [self]
+
+    def get_num_items(self):
+        return 1
+
     def __str__(self):
         return (
             f"Item(width={self.width}, depth={self.depth}, height={self.height}, "

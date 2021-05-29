@@ -6,6 +6,13 @@ import pandas as pd
 from tqdm import tqdm
 
 
+def argsort(seq):
+    """
+    Sort the given array and return indices instead of values
+    """
+    return sorted(range(len(seq)), key=seq.__getitem__)
+
+
 def get_liquid_volume(dims):
     """
     Return the liquid volume of a collection of items,
