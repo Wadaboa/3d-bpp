@@ -1,13 +1,25 @@
-# Pallet EUR 1 / Container 1A
-# Pallet height represents the height of its base
-pallet_lenght, pallet_width, pallet_height = 800, 1200, 145 # mm
-container_lenght, container_width, container_height = 2330, 12000, 2200 # mm
-pallet_load, container_load = 2490, 26480 # kg
+# Container 1A (mm and kg)
+CONTAINER_WIDTH = 2330
+CONTAINER_HEIGHT = 2200
+CONTAINER_DEPTH = 12000
+CONTAINER_LOAD = 26480
 
-# Product dimension ranges
-num_products = 1000
-min_lenght, min_width, min_height = 50, 50, 50 # mm
-min_weight = 2 # kg
-max_product_height = container_height - pallet_height
+# Pallet EUR 1 (mm and kg)
+PALLET_WIDTH = 1200
+PALLET_DEPTH = 800
+PALLET_HEIGHT = CONTAINER_HEIGHT - 145  # 145 is the height of the pallet itself
+PALLET_LOAD = 2490
 
+# Product dimension ranges (mm and kg)
+NUM_PRODUCTS = 1000
+MIN_PRODUCT_WIDTH = 50
+MAX_PRODUCT_WIDTH = PALLET_WIDTH
+MIN_PRODUCT_HEIGHT = 50
+MAX_PRODUCT_HEIGHT = PALLET_HEIGHT
+MIN_PRODUCT_DEPTH = 50
+MAX_PRODUCT_DEPTH = PALLET_DEPTH
+MIN_PRODUCT_WEIGHT = 2
+MAX_PRODUCT_WEIGHT = PALLET_LOAD
+
+# Numpy
 RANDOM_SEED = 42
