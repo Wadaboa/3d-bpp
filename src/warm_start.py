@@ -5,11 +5,11 @@ from rectpack.maxrects import MaxRectsBaf
 from . import utils, layers, superitems
 
 
-def get_initial_groups(order_superitems, tol=0):
+def get_initial_groups(order_superitems, heigth_tol=0):
     # Get unique heights
     unique_heights = sorted(set(s.height for s in order_superitems))
     height_sets = {
-        h: {k for k in unique_heights[i:] if k - h <= tol} for i, h in enumerate(unique_heights)
+        h: {k for k in unique_heights[i:] if k - h <= heigth_tol} for i, h in enumerate(unique_heights)
     }
     for (i, hi), (j, hj) in zip(list(height_sets.items())[:-1], list(height_sets.items())[1:]):
         if hj.issubset(hi):
@@ -18,7 +18,7 @@ def get_initial_groups(order_superitems, tol=0):
     # Generate one group of superitems for each similar height
     groups = []
     for height in unique_heights:
-        groups += [[s for s in order_superitems if s.height >= height and s.height <= height + tol]]
+        groups += [[s for s in order_superitems if s.height >= height and s.height <= height + heigth_tol]]
 
     final_groups = []
     for group in groups:

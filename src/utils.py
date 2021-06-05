@@ -37,6 +37,7 @@ def flatten(l):
 
 def np_are_equal(a1, a2):
     """
+    Use np.array_equal(a1,a2)
     Check if the given arrays have the same shape and elements
     """
     if a1.shape != a2.shape:

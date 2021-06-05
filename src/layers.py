@@ -18,7 +18,9 @@ class Layer:
         return superitems.iloc[self.superitem_ids]
 
     def get_item_ids(self, superitems):
-        return list(utils.flatten(self.get_superitems(superitems).flattened_items.to_list()))
+        return list(
+            utils.flatten(self.get_superitems(superitems).flattened_items.to_list())
+        )
 
     def get_items(self, order, superitems):
         item_ids = self.get_item_ids(superitems)
@@ -53,7 +55,9 @@ class LayerPool:
         self.layers = layers or []
 
     def add(self, layer):
-        assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
+        assert isinstance(
+            layer, Layer
+        ), "The given layer should be an instance of the Layer class"
         self.layers.append(layer)
 
     def add_pool(self, layer_pool):
@@ -67,12 +71,14 @@ class LayerPool:
             layer.map_superitem_ids(mapping)
 
     def is_present(self, layer):
-        assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
+        assert isinstance(
+            layer, Layer
+        ), "The given layer should be an instance of the Layer class"
         present = False
         for other_layer in self.layers:
-            if utils.np_are_equal(
+            if np.array_equal(
                 layer.superitem_ids, other_layer.superitem_ids
-            ) and utils.np_are_equal(layer.coords, other_layer.coords):
+            ) and np.array_equal(layer.coords, other_layer.coords):
                 present = True
                 break
         return present
@@ -159,5 +165,7 @@ class LayerPool:
         return self.layers[i]
 
     def __setitem__(self, i, e):
-        assert isinstance(e, Layer), "The given layer should be an instance of the Layer class"
+        assert isinstance(
+            e, Layer
+        ), "The given layer should be an instance of the Layer class"
         self.layers[i] = e

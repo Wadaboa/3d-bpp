@@ -53,13 +53,22 @@ class ProductDataset:
         Generate a sample of products
         """
         # Define ratios and volumes as specified in the paper
-        wh_ratios = np.random.normal(loc=0.695, scale=0.118, size=(self.num_products, 1))
-        dh_ratios = np.random.lognormal(mean=-0.654, sigma=0.453, size=(self.num_products, 1))
-        volumes = np.random.lognormal(mean=2.568, sigma=0.705, size=(self.num_products, 1)) * 1e6
+        wh_ratios = np.random.normal(
+            loc=0.695, scale=0.118, size=(self.num_products, 1)
+        )
+        dh_ratios = np.random.lognormal(
+            mean=-0.654, sigma=0.453, size=(self.num_products, 1)
+        )
+        volumes = (
+            np.random.lognormal(mean=2.568, sigma=0.705, size=(self.num_products, 1))
+            * 1e6
+        )
 
         # Generate each dimension separately
         heights = np.clip(
-            np.power(volumes / (wh_ratios * dh_ratios), 1 / 3), self.min_height, self.max_height
+            np.power(volumes / (wh_ratios * dh_ratios), 1 / 3),
+            self.min_height,
+            self.max_height,
         )
         widths = np.clip(heights * wh_ratios, self.min_width, self.max_width)
         depths = np.clip(heights * dh_ratios, self.min_depth, self.max_depth)

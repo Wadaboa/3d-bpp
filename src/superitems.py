@@ -227,7 +227,10 @@ class FourHorizontalSuperitem(HorizontalSuperitem):
     def _get_superitem(self):
         i1, i2, i3, i4 = tuple(self.items)
         return Item(
-            i1.width * 2, i1.depth * 2, i1.height, i1.weight + i2.weight + i3.weight + i4.weight
+            i1.width * 2,
+            i1.depth * 2,
+            i1.height,
+            i1.weight + i2.weight + i3.weight + i4.weight,
         )
 
     def get_item_coords(self, height=0):
@@ -242,7 +245,7 @@ class FourHorizontalSuperitem(HorizontalSuperitem):
 
 class VerticalSuperitem(Superitem):
     """
-    A vertical superitem is a group of >= 2 items or superitems
+    A vertical superitem is a group of >= 2 items or horizontal superitems
     that have similar dimensions and get stacked on top of each other
     """
 
@@ -288,7 +291,9 @@ class SuperitemPool:
         # Generate horizontal and vertical superitems and
         # filter the ones exceeding the pallet dimensions
         superitems_horizontal = self._gen_superitems_horizontal()
-        superitems_vertical = self._gen_superitems_vertical(self.items + superitems_horizontal)
+        superitems_vertical = self._gen_superitems_vertical(
+            self.items + superitems_horizontal
+        )
         superitems = self.items + superitems_horizontal + superitems_vertical
         superitems = self._filter_superitems(superitems)
         return superitems
@@ -361,7 +366,10 @@ class SuperitemPool:
 
         # Generate vertical superitems
         for slice in slices:
-            if slice[0].width * slice[0].depth >= 0.7 * slice[-1].width * slice[-1].depth:
+            if (
+                slice[0].width * slice[0].depth
+                >= 0.7 * slice[-1].width * slice[-1].depth
+            ):
                 items = [Item.from_series(p) for p in slice]
                 superitems_vertical += [VerticalSuperitem(items)]
 
