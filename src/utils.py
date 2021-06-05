@@ -7,6 +7,31 @@ import pandas as pd
 from tqdm import tqdm
 
 
+class Coordinate:
+    """
+    Helper class to define a pair/triplet of coordinates
+    """
+
+    def __init__(self, x, y, z=None):
+        self.x = int(x)
+        self.y = int(y)
+        self.z = int(z) if z is not None else z
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.x == other.x and self.y == other.y and self.z == other.z
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __str__(self):
+        return f"Coordinate(x={self.x}, y={self.y}, z={self.z})"
+
+    def __repr__(self):
+        return self.__str__()
+
+
 def argsort(seq):
     """
     Sort the given array and return indices instead of values
@@ -18,8 +43,15 @@ def check_duplicate_keys(dicts, err_msg):
     """
     Assert that the input dictionaries have no common keys
     """
+    assert not duplicate_keys(dicts), err_msg
+
+
+def duplicate_keys(dicts):
+    """
+    Check that the input dictionaries have common keys
+    """
     keys = list(flatten([d.keys() for d in dicts]))
-    assert len([k for k, v in Counter(keys).iteritems() if v > 1]) == 0, err_msg
+    return len([k for k, v in Counter(keys).items() if v > 1]) > 0
 
 
 def get_liquid_volume(dims):

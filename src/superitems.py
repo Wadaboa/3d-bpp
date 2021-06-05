@@ -19,28 +19,24 @@ class Dimension:
         self.weight = int(weight)
         self.volume = int(width * depth * height)
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (
+                self.width == other.width
+                and self.depth == other.depth
+                and self.height == other.height
+                and self.weight == other.weight
+            )
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def __str__(self):
         return (
             f"Dimension(width={self.width}, depth={self.depth}, height={self.height}, "
             f"weight={self.weight}, volume={self.volume})"
         )
-
-    def __repr__(self):
-        return self.__str__()
-
-
-class Coordinate:
-    """
-    Helper class to define a triplet of coordinates
-    """
-
-    def __init__(self, x, y, z):
-        self.x = float(x)
-        self.y = float(y)
-        self.z = float(z)
-
-    def __str__(self):
-        return f"Coordinate(x={self.x}, y={self.y}, z={self.z})"
 
     def __repr__(self):
         return self.__str__()
@@ -90,6 +86,14 @@ class Item:
     def volume(self):
         return self.dimensions.volume
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.id == other.id and self.dimensions == other.dimensions
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def __str__(self):
         return (
             f"Item(id={self.id}, width={self.width}, depth={self.depth}, "
@@ -135,7 +139,7 @@ class Superitem:
 
     @property
     def id(self):
-        return list(utils.flatten([i.id for i in self.items]))
+        return sorted(utils.flatten([i.id for i in self.items]))
 
     def get_items(self):
         """
@@ -148,6 +152,20 @@ class Superitem:
         Return the number of single items in the superitem
         """
         return len(self.id)
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (
+                self.id == other.id
+                and self.width == other.width
+                and self.depth == other.depth
+                and self.height == other.height
+                and self.weight == other.weight
+            )
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __str__(self):
         return (
@@ -181,7 +199,7 @@ class SingleItemSuperitem(Superitem):
         return max(i.height for i in self.items)
 
     def get_items_coords(self, width=0, depth=0, height=0):
-        return {self.items[0]: Coordinate(width, height, height)}
+        return {self.items[0].id: utils.Coordinate(width, depth, height)}
 
 
 class HorizontalSuperitem(Superitem):
@@ -299,10 +317,10 @@ class VerticalSuperitem(Superitem):
     def get_items_coords(self, width=0, depth=0, height=0):
         # Adjust coordinates to account for stacking tolerance
         all_coords = dict()
-        for i in range(len(self.items) - 1):
+        for i in range(len(self.items)):
             coords = self.items[i].get_items_coords(
-                width=width + ((self.items[i + 1].width - self.items[i].width) / 2),
-                depth=depth + ((self.items[i + 1].depth - self.items[i].depth) / 2),
+                width=width,
+                depth=depth,
                 height=height,
             )
             utils.check_duplicate_keys(
@@ -310,16 +328,6 @@ class VerticalSuperitem(Superitem):
             )
             all_coords = {**all_coords, **coords}
             height += self.items[i].height
-
-        # The last superitem in the stack does not require
-        # adjusting coordinates
-        coords = self.items[-1].get_items_coords(
-            width=width,
-            depth=depth,
-            height=height,
-        )
-        utils.check_duplicate_keys([all_coords, coords], "Duplicated item in the same superitem")
-        all_coords = {**all_coords, **coords}
 
         return all_coords
 
@@ -330,21 +338,19 @@ class SuperitemPool:
     """
 
     def __init__(self, order=None, pallet_dims=None, max_vstacked=2, superitems=None):
-        assert superitems is not None or (superitems is None and order is not None)
         self.superitems = (
             self._gen_superitems(order, pallet_dims, max_vstacked)
-            if superitems is None
+            if order is not None
             else superitems
+            if superitems is not None
+            else []
         )
-        self.fsi, self.from_index_to_item_id, self.from_item_id_to_index = self._get_fsi()
 
     def _gen_superitems(self, order, pallet_dims, max_vstacked):
         """
-        Group and stack items both horizontally and vertically
-        to form superitems
+        Generate horizontal and vertical superitems and
+        filter the ones exceeding the pallet dimensions
         """
-        # Generate horizontal and vertical superitems and
-        # filter the ones exceeding the pallet dimensions
         items = Item.from_dataframe(order)
         single_items_superitems = self._gen_single_items_superitems(items)
         superitems_horizontal = self._gen_superitems_horizontal(single_items_superitems)
@@ -444,7 +450,25 @@ class SuperitemPool:
             if s.width <= pallet_width and s.depth <= pallet_depth and s.height <= pallet_height
         ]
 
-    def _get_fsi(self):
+    def add(self, superitem):
+        """
+        Add the given Superitem to the current pool
+        """
+        assert isinstance(
+            superitem, Superitem
+        ), "The given superitem should be an instance of the Superitem class"
+        self.superitems.append(superitem)
+
+    def extend(self, superitems):
+        """
+        Extend the current pool with the given one
+        """
+        assert isinstance(superitems, SuperitemPool) or isinstance(
+            superitems, list
+        ), "The given set of superitems should be an instance of the SuperitemPool class"
+        self.superitems.extend(superitems)
+
+    def get_fsi(self):
         """
         Return a binary matrix of superitems by items, s.t.
         fsi[s, i] = 1 iff superitems s contains item i
@@ -455,7 +479,7 @@ class SuperitemPool:
         from_item_id_to_index = dict(zip(item_ids, indexes))
 
         fsi = np.zeros((len(self.superitems), self.get_num_unique_items()), dtype=int)
-        for s, superitem in enumerate(self.superitems):
+        for s, superitem in enumerate(self):
             for item_id in superitem.id:
                 fsi[s, from_item_id_to_index[item_id]] = 1
 
@@ -481,7 +505,7 @@ class SuperitemPool:
         """
         Return the flattened list of item ids inside the superitem pool
         """
-        return list(set(utils.flatten(self.get_item_ids())))
+        return sorted(set(utils.flatten(self.get_item_ids())))
 
     def get_num_unique_items(self):
         """
@@ -489,13 +513,26 @@ class SuperitemPool:
         """
         return len(self.get_unique_item_ids())
 
+    def get_max_height(self):
+        """
+        Return the maximum height of the superitems in the pool
+        """
+        return max(s.height for s in self.superitems)
+
     def to_dataframe(self):
         """
         Convert the superitem pool to a DataFrame instance
         """
         ws, ds, hs = self.get_superitems_dims()
         ids = self.get_item_ids()
-        return pd.DataFrame({"width": ws, "depth": ds, "height": hs, "ids": ids})
+        types = [s.__class__.__name__ for s in self.superitems]
+        return pd.DataFrame({"width": ws, "depth": ds, "height": hs, "ids": ids, "type": types})
+
+    def __len__(self):
+        return len(self.superitems)
+
+    def __contains__(self, superitem):
+        return superitem in self.superitems
 
     def __getitem__(self, i):
         return self.superitems[i]
