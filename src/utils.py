@@ -1,4 +1,5 @@
 import itertools
+from collections import Counter
 from collections.abc import Iterable
 
 import numpy as np
@@ -11,6 +12,14 @@ def argsort(seq):
     Sort the given array and return indices instead of values
     """
     return sorted(range(len(seq)), key=seq.__getitem__)
+
+
+def check_duplicate_keys(dicts, err_msg):
+    """
+    Assert that the input dictionaries have no common keys
+    """
+    keys = list(flatten([d.keys() for d in dicts]))
+    assert len([k for k, v in Counter(keys).iteritems() if v > 1]) == 0, err_msg
 
 
 def get_liquid_volume(dims):

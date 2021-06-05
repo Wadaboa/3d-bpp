@@ -9,42 +9,27 @@ class Layer:
     items or superitems having similar heights
     """
 
-    def __init__(self, height, superitem_ids, coords):
+    def __init__(self, height, superitems_pool, superitems_coords):
         self.height = height
-        self.superitem_ids = superitem_ids
-        self.coords = coords
+        self.superitems_pool = superitems_pool
+        self.superitems_coords = superitems_coords
 
-    def get_superitems(self, superitems):
-        return superitems.iloc[self.superitem_ids]
+        for s in self.superitems_pool:
+            s.get_items_coords
 
-    def get_item_ids(self, superitems):
-        return list(
-            utils.flatten(self.get_superitems(superitems).flattened_items.to_list())
-        )
+    @property
+    def volume(self):
+        return sum(s.volume for s in self.superitems_pool)
 
-    def get_items(self, order, superitems):
-        item_ids = self.get_item_ids(superitems)
-        return order.iloc[item_ids]
+    @property
+    def area(self):
+        sum(s.width * s.depth for s in self.superitems_pool)
 
-    def get_volume(self, superitems):
-        return self.get_superitems(superitems).volume.sum()
-
-    def get_area(self, superitems):
-        s = self.get_superitems(superitems)
-        return (s.lenght * s.width).sum()
-
-    def get_density(self, superitems, W, D, two_dims=False):
-        return (
-            self.get_volume(superitems) / W * D * self.height
-            if two_dims
-            else self.get_area(superitems) / W * D
-        )
-
-    def map_superitem_ids(self, mapping):
-        self.superitem_ids = [mapping[s] for s in self.superitem_ids]
+    def get_density(self, W, D, two_dims=False):
+        return self.volume / W * D * self.height if two_dims else self.area / W * D
 
     def __str__(self):
-        return f"Layer(height={self.height}, ids={self.superitem_ids})"
+        return f"Layer(height={self.height}, ids={self.superitems_pool.get_unique_item_ids()})"
 
     def __repr__(self):
         return self.__str__()
@@ -55,9 +40,7 @@ class LayerPool:
         self.layers = layers or []
 
     def add(self, layer):
-        assert isinstance(
-            layer, Layer
-        ), "The given layer should be an instance of the Layer class"
+        assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
         self.layers.append(layer)
 
     def add_pool(self, layer_pool):
@@ -71,14 +54,12 @@ class LayerPool:
             layer.map_superitem_ids(mapping)
 
     def is_present(self, layer):
-        assert isinstance(
-            layer, Layer
-        ), "The given layer should be an instance of the Layer class"
+        assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
         present = False
         for other_layer in self.layers:
-            if np.array_equal(
-                layer.superitem_ids, other_layer.superitem_ids
-            ) and np.array_equal(layer.coords, other_layer.coords):
+            if np.array_equal(layer.superitem_ids, other_layer.superitem_ids) and np.array_equal(
+                layer.coords, other_layer.coords
+            ):
                 present = True
                 break
         return present
@@ -165,7 +146,5 @@ class LayerPool:
         return self.layers[i]
 
     def __setitem__(self, i, e):
-        assert isinstance(
-            e, Layer
-        ), "The given layer should be an instance of the Layer class"
+        assert isinstance(e, Layer), "The given layer should be an instance of the Layer class"
         self.layers[i] = e

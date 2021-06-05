@@ -110,7 +110,7 @@ class Superitem:
         # Represents a list of superitems
         self.items = items
 
-    def get_item_coords(self, height=0):
+    def get_items_coords(self, width=0, depth=0, height=0):
         raise NotImplementedError()
 
     @property
@@ -152,7 +152,7 @@ class Superitem:
     def __str__(self):
         return (
             f"Superitem(ids={self.id}, width={self.width}, depth={self.depth}, height={self.height}, "
-            f"weight={self.weight}, volume={self.volume}, coords={self.get_item_coords()})"
+            f"weight={self.weight}, volume={self.volume}, coords={self.get_items_coords()})"
         )
 
     def __repr__(self):
@@ -180,8 +180,8 @@ class SingleItemSuperitem(Superitem):
     def height(self):
         return max(i.height for i in self.items)
 
-    def get_item_coords(self, height=0):
-        return [Coordinate(0, 0, height)]
+    def get_items_coords(self, width=0, depth=0, height=0):
+        return {self.items[0]: Coordinate(width, height, height)}
 
 
 class HorizontalSuperitem(Superitem):
@@ -215,9 +215,12 @@ class TwoHorizontalSuperitemWidth(HorizontalSuperitem):
     def depth(self):
         return max(i.depth for i in self.items)
 
-    def get_item_coords(self, height=0):
+    def get_items_coords(self, width=0, depth=0, height=0):
         i1, i2 = tuple(self.items)
-        return [Coordinate(0, 0, height), Coordinate(i1.width, 0, height)]
+        d1 = i1.get_item_coords(width=width, depth=depth, height=height)
+        d2 = i2.get_item_coords(width=width + i1.width, depth=depth, height=height)
+        utils.check_duplicate_keys([d1, d2], "Duplicated item in the same superitem")
+        return {**d1, **d2}
 
 
 class TwoHorizontalSuperitemDepth(HorizontalSuperitem):
@@ -237,9 +240,12 @@ class TwoHorizontalSuperitemDepth(HorizontalSuperitem):
     def depth(self):
         return sum(i.depth for i in self.items)
 
-    def get_item_coords(self, height=0):
+    def get_items_coords(self, width=0, depth=0, height=0):
         i1, i2 = tuple(self.items)
-        return [Coordinate(0, 0, height), Coordinate(0, i1.depth, height)]
+        d1 = i1.get_item_coords(width=width, depth=depth, height=height)
+        d2 = i2.get_item_coords(width=width, depth=i1.depth + depth, height=height)
+        utils.check_duplicate_keys([d1, d2], "Duplicated item in the same superitem")
+        return {**d1, **d2}
 
 
 class FourHorizontalSuperitem(HorizontalSuperitem):
@@ -259,14 +265,14 @@ class FourHorizontalSuperitem(HorizontalSuperitem):
     def depth(self):
         return sum(i.depth for i in self.items)
 
-    def get_item_coords(self, height=0):
-        i1, i2 = tuple(self.items)
-        return [
-            Coordinate(0, 0, height),
-            Coordinate(i1.width, 0, height),
-            Coordinate(0, i1.depth, height),
-            Coordinate(i1.width, i1.depth, height),
-        ]
+    def get_items_coords(self, width=0, depth=0, height=0):
+        i1, i2, i3, i4 = tuple(self.items)
+        d1 = i1.get_item_coords(width=width, depth=depth, height=height)
+        d2 = i2.get_item_coords(width=i1.width + width, depth=depth, height=height)
+        d3 = i3.get_item_coords(width=width, depth=i1.depth + depth, height=height)
+        d4 = i4.get_item_coords(width=i1.width + width, depth=i1.depth + depth, height=height)
+        utils.check_duplicate_keys([d1, d2, d3, d4], "Duplicated item in the same superitem")
+        return {**d1, **d2, **d3, **d4}
 
 
 class VerticalSuperitem(Superitem):
@@ -290,11 +296,31 @@ class VerticalSuperitem(Superitem):
     def height(self):
         return sum(i.height for i in self.items)
 
-    def get_item_coords(self, height=0):
-        all_coords = []
-        for item in self.items:
-            all_coords += item.get_item_coords(height=height)
-            height += item.height
+    def get_items_coords(self, width=0, depth=0, height=0):
+        # Adjust coordinates to account for stacking tolerance
+        all_coords = dict()
+        for i in range(len(self.items) - 1):
+            coords = self.items[i].get_items_coords(
+                width=width + ((self.items[i + 1].width - self.items[i].width) / 2),
+                depth=depth + ((self.items[i + 1].depth - self.items[i].depth) / 2),
+                height=height,
+            )
+            utils.check_duplicate_keys(
+                [all_coords, coords], "Duplicated item in the same superitem"
+            )
+            all_coords = {**all_coords, **coords}
+            height += self.items[i].height
+
+        # The last superitem in the stack does not require
+        # adjusting coordinates
+        coords = self.items[-1].get_items_coords(
+            width=width,
+            depth=depth,
+            height=height,
+        )
+        utils.check_duplicate_keys([all_coords, coords], "Duplicated item in the same superitem")
+        all_coords = {**all_coords, **coords}
+
         return all_coords
 
 
