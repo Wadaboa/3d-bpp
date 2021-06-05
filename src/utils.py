@@ -35,16 +35,6 @@ def flatten(l):
             yield el
 
 
-def np_are_equal(a1, a2):
-    """
-    Use np.array_equal(a1,a2)
-    Check if the given arrays have the same shape and elements
-    """
-    if a1.shape != a2.shape:
-        return False
-    return np.count_nonzero(a1 - a2) == 0
-
-
 def get_l0_lb(order, W, D, H):
     """
     L0 lower bound for the minimum number of required bins

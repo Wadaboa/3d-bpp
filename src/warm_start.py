@@ -5,11 +5,16 @@ from rectpack.maxrects import MaxRectsBaf
 from . import utils, layers, superitems
 
 
-def get_initial_groups(order_superitems, heigth_tol=0):
+def get_height_groups(superitems_pool, height_tol=0):
+    """
+    Divide the whole pool of superitems into groups having either
+    the exact same height or an height within the given tolerance
+    """
     # Get unique heights
-    unique_heights = sorted(set(s.height for s in order_superitems))
+    unique_heights = sorted(set(s.height for s in superitems_pool))
     height_sets = {
-        h: {k for k in unique_heights[i:] if k - h <= heigth_tol} for i, h in enumerate(unique_heights)
+        h: {k for k in unique_heights[i:] if k - h <= height_tol}
+        for i, h in enumerate(unique_heights)
     }
     for (i, hi), (j, hj) in zip(list(height_sets.items())[:-1], list(height_sets.items())[1:]):
         if hj.issubset(hi):
@@ -18,26 +23,12 @@ def get_initial_groups(order_superitems, heigth_tol=0):
     # Generate one group of superitems for each similar height
     groups = []
     for height in unique_heights:
-        groups += [[s for s in order_superitems if s.height >= height and s.height <= height + heigth_tol]]
-
-    final_groups = []
-    for group in groups:
-        sort_criteria = [
-            (s.get_num_items(), int(isinstance(s, superitems.VerticalSuperitem))) for s in group
+        pool = [
+            s for s in superitems_pool if s.height >= height and s.height <= height + height_tol
         ]
-        sorted_group = [group[c] for c in utils.argsort(sort_criteria)[::-1]]
-        indexes_to_keep = list(range(len(sorted_group)))
-        for i in range(len(sorted_group)):
-            for item in sorted_group[i].get_items():
-                for j in range(i + 1, len(sorted_group)):
-                    if (
-                        item in sorted_group[j].get_items()
-                    ):  ###### TODO implement equals in Item class and add id
-                        indexes_to_keep.remove(j)
+        groups += [superitems.SuperitemPool(superitems=pool)]
 
-        final_groups += [[sorted_group[i] for i in indexes_to_keep]]
-
-    return final_groups
+    return groups
 
 
 def maxrects(rects, bin_lenght, bin_width):
