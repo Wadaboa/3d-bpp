@@ -81,13 +81,19 @@ class Layer:
     def area(self):
         return sum(s.width * s.depth for s in self.superitems_pool)
 
-    def to_dataframe(self):
+    def to_dataframe(self, z=0):
         items_coords = self.get_items_coords()
+        items_dims = self.get_items_dims()
         keys = list(items_coords.keys())
         xs = [items_coords[k].x for k in keys]
         ys = [items_coords[k].y for k in keys]
-        zs = [items_coords[k].z for k in keys]
-        return pd.DataFrame({"item": keys, "x": xs, "y": ys, "z": zs})
+        zs = [items_coords[k].z + z for k in keys]
+        ws = [items_dims[k].width for k in keys]
+        ds = [items_dims[k].depth for k in keys]
+        hs = [items_dims[k].height for k in keys]
+        return pd.DataFrame(
+            {"item": keys, "x": xs, "y": ys, "z": zs, "width": ws, "depth": ds, "height": hs}
+        )
 
     def __str__(self):
         return f"Layer(height={self.height}, ids={self.superitems_pool.get_unique_item_ids()})"
@@ -199,17 +205,27 @@ class LayerPool:
         """
         return [layer.get_density(W=W, D=D, two_dims=two_dims) for layer in self.layers]
 
+    def sort_by_densities(self, W, D, two_dims=True):
+        """
+        Sort layers in the pool by density
+        """
+        densities = self.get_densities(W, D, two_dims=two_dims)
+        sorted_indices = np.array(densities).argsort()[::-1]
+        self.layers = [self.layers[i] for i in sorted_indices]
+
     def discard_by_densities(self, W, D, min_density=0.5, two_dims=True):
         """
         Sort layers by densities and keep only those with a
         density greater than or equal to the given minimum
         """
+        self.sort_by_densities(W, D, two_dims=two_dims)
         densities = self.get_densities(W, D, two_dims=two_dims)
-        sorted_indices = np.array(densities).argsort()[::-1]
-        sorted_densities = [densities[i] for i in sorted_indices]
-        return self.subset(
-            [sorted_indices[i] for i, d in enumerate(sorted_densities) if d >= min_density]
-        )
+        last_index = -1
+        for i, d in enumerate(densities):
+            if d >= min_density:
+                last_index = i
+                break
+        return self.subset(list(range(last_index + 1)))
 
     def discard_by_coverage(self, max_coverage=3):
         """
@@ -278,12 +294,15 @@ class LayerPool:
         new_pool = self.discard_by_densities(W, D, min_density=min_density, two_dims=two_dims)
         new_pool = new_pool.discard_by_coverage(max_coverage=max_coverage)
         new_pool = new_pool.remove_duplicated_items()
+        new_pool.sort_by_densities(W, D, two_dims=two_dims)
         return new_pool
 
-    def to_dataframe(self):
+    def to_dataframe(self, zs=None):
+        if zs is None:
+            zs = [0] * len(self)
         dfs = []
         for i, layer in enumerate(self.layers):
-            df = layer.to_dataframe()
+            df = layer.to_dataframe(z=zs[i])
             df["layer"] = [i] * len(df)
             dfs += [df]
         return pd.concat(dfs, axis=0).reset_index(drop=True)

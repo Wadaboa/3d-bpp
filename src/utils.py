@@ -196,17 +196,6 @@ def duplicate_keys(dicts):
     return len([k for k, v in Counter(keys).items() if v > 1]) > 0
 
 
-def get_liquid_volume(dims):
-    """
-    Return the liquid volume of a collection of items,
-    given their dimensions
-    """
-    volume = 0
-    for dim in dims:
-        volume += dim[0] * dim[1] * dim[2]
-    return volume / 1e9
-
-
 def flatten(l):
     """
     Given nested Python lists, return their flattened version

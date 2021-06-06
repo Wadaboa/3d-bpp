@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
@@ -19,6 +20,12 @@ class Bin:
     @property
     def height(self):
         return sum(l.height for l in self.layer_pool)
+
+    def get_layer_zs(self):
+        heights = [0]
+        for layer in self.layer_pool[:-1]:
+            heights += [heights[-1] + layer.height]
+        return heights
 
     def add_product_to_pallet(self, ax, item_id, coords, dims):
         vertices = utils.Vertices(coords, dims)
@@ -71,6 +78,9 @@ class Bin:
             height += layer.height
         return ax
 
+    def to_dataframe(self):
+        return self.layer_pool.to_dataframe(zs=self.get_layer_zs())
+
 
 class BinPool:
     """
@@ -79,6 +89,7 @@ class BinPool:
 
     def __init__(self, layer_pool, pallet_dims):
         self.layer_pool = layer_pool
+        layer_pool.sort_by_densities(pallet_dims[0], pallet_dims[1])
         self.pallet_dims = pallet_dims
         self.bins = self._build()
 
@@ -108,3 +119,11 @@ class BinPool:
         for bin in self.bins:
             ax = bin.plot(self.pallet_dims)
         plt.show()
+
+    def to_dataframe(self):
+        dfs = []
+        for i, bin in enumerate(self.bins):
+            df = bin.to_dataframe()
+            df["bin"] = [i] * len(df)
+            dfs += [df]
+        return pd.concat(dfs, axis=0)

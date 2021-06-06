@@ -313,22 +313,31 @@ class SuperitemPool:
     Set of superitems for a given order
     """
 
-    def __init__(self, order=None, pallet_dims=None, max_vstacked=2, superitems=None):
+    def __init__(
+        self,
+        order=None,
+        pallet_dims=None,
+        max_vstacked=2,
+        superitems=None,
+        only_single=False,
+    ):
         self.superitems = (
-            self._gen_superitems(order, pallet_dims, max_vstacked)
+            self._gen_superitems(order, pallet_dims, max_vstacked, only_single)
             if order is not None
             else superitems
             if superitems is not None
             else []
         )
 
-    def _gen_superitems(self, order, pallet_dims, max_vstacked):
+    def _gen_superitems(self, order, pallet_dims, max_vstacked, only_single):
         """
         Generate horizontal and vertical superitems and
         filter the ones exceeding the pallet dimensions
         """
         items = Item.from_dataframe(order)
         single_items_superitems = self._gen_single_items_superitems(items)
+        if only_single:
+            return single_items_superitems
         superitems_horizontal = self._gen_superitems_horizontal(single_items_superitems)
         superitems_vertical = self._gen_superitems_vertical(
             single_items_superitems + superitems_horizontal, max_vstacked
