@@ -7,41 +7,6 @@ from tqdm import tqdm
 from . import utils
 
 
-class Dimension:
-    """
-    Helper class to define object dimensions
-    """
-
-    def __init__(self, width, depth, height, weight=None):
-        self.width = int(width)
-        self.depth = int(depth)
-        self.height = int(height)
-        self.weight = int(weight)
-        self.volume = int(width * depth * height)
-
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return (
-                self.width == other.width
-                and self.depth == other.depth
-                and self.height == other.height
-                and self.weight == other.weight
-            )
-        return False
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __str__(self):
-        return (
-            f"Dimension(width={self.width}, depth={self.depth}, height={self.height}, "
-            f"weight={self.weight}, volume={self.volume})"
-        )
-
-    def __repr__(self):
-        return self.__str__()
-
-
 class Item:
     """
     An item is a single product
@@ -49,7 +14,7 @@ class Item:
 
     def __init__(self, id, width, depth, height, weight):
         self.id = id
-        self.dimensions = Dimension(width, depth, height, weight)
+        self.dimensions = utils.Dimension(width, depth, height, weight)
 
     @classmethod
     def from_series(cls, item):
@@ -153,6 +118,14 @@ class Superitem:
         """
         return len(self.id)
 
+    def get_items_dims(self):
+        all_dims = dict()
+        for i in range(len(self.items)):
+            dims = self.items[i].get_items_dims()
+            utils.check_duplicate_keys([all_dims, dims], "Duplicated item in the same superitem")
+            all_dims = {**all_dims, **dims}
+        return all_dims
+
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             return (
@@ -200,6 +173,9 @@ class SingleItemSuperitem(Superitem):
 
     def get_items_coords(self, width=0, depth=0, height=0):
         return {self.items[0].id: utils.Coordinate(width, depth, height)}
+
+    def get_items_dims(self):
+        return {self.items[0].id: self.items[0].dimensions}
 
 
 class HorizontalSuperitem(Superitem):

@@ -30,6 +30,15 @@ class Layer:
             items_coords = {**items_coords, **coords}
         return items_coords
 
+    def get_items_dims(self):
+        items_dims = dict()
+        for s, c in zip(self.superitems_pool, self.superitems_coords):
+            dims = s.get_items_dims()
+            if utils.duplicate_keys([items_dims, dims]):
+                print("Duplicated item in the same layer")
+            items_dims = {**items_dims, **dims}
+        return items_dims
+
     def get_unique_items_ids(self):
         """
         Return the flattened list of item ids inside the layer
@@ -112,6 +121,16 @@ class LayerPool:
         if add_single:
             self._add_single_layers()
 
+    def subset(self, layer_indices=None):
+        """
+        Return a new layer pool with the given subset of layers
+        and the same superitems pool
+        """
+        layers = [
+            l for i, l in enumerate(self.layers) if layer_indices is None or i in layer_indices
+        ]
+        return LayerPool(self.superitems_pool, layers=layers, add_single=False)
+
     def _add_single_layers(self):
         """
         Add one layer for each superitem that only
@@ -188,10 +207,8 @@ class LayerPool:
         densities = self.get_densities(W, D, two_dims=two_dims)
         sorted_indices = np.array(densities).argsort()[::-1]
         sorted_densities = [densities[i] for i in sorted_indices]
-        sorted_layers = [self.layers[i] for i in sorted_indices]
-        return LayerPool(
-            self.superitems_pool,
-            layers=[l for d, l in zip(sorted_densities, sorted_layers) if d >= min_density],
+        return self.subset(
+            [sorted_indices[i] for i, d in enumerate(sorted_densities) if d >= min_density]
         )
 
     def discard_by_coverage(self, max_coverage=3):
@@ -200,8 +217,8 @@ class LayerPool:
         """
         all_item_ids = self.get_unique_items_ids()
         item_coverage = dict(zip(all_item_ids, [0] * len(all_item_ids)))
-        selected_layers = LayerPool(self.superitems_pool)
-        for layer in self.layers:
+        layers_to_select = []
+        for i, layer in enumerate(self.layers):
             to_select = True
             already_covered = 0
 
@@ -230,11 +247,11 @@ class LayerPool:
             # for each item in such layer and add it to the pool
             # of selected layers
             if to_select:
-                selected_layers.add(layer)
+                layers_to_select += [i]
                 for item in item_ids:
                     item_coverage[item] += 1
 
-        return selected_layers
+        return self.subset(layers_to_select)
 
     def remove_duplicated_items(self):
         """

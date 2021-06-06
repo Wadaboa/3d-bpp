@@ -7,15 +7,64 @@ import pandas as pd
 from tqdm import tqdm
 
 
+class Dimension:
+    """
+    Helper class to define object dimensions
+    """
+
+    def __init__(self, width, depth, height, weight=None):
+        self.width = int(width)
+        self.depth = int(depth)
+        self.height = int(height)
+        self.weight = int(weight)
+        self.volume = int(width * depth * height)
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (
+                self.width == other.width
+                and self.depth == other.depth
+                and self.height == other.height
+                and self.weight == other.weight
+            )
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __str__(self):
+        return (
+            f"Dimension(width={self.width}, depth={self.depth}, height={self.height}, "
+            f"weight={self.weight}, volume={self.volume})"
+        )
+
+    def __repr__(self):
+        return self.__str__()
+
+
 class Coordinate:
     """
     Helper class to define a pair/triplet of coordinates
     """
 
-    def __init__(self, x, y, z=None):
+    def __init__(self, x, y, z=0):
         self.x = int(x)
         self.y = int(y)
-        self.z = int(z) if z is not None else z
+        self.z = int(z)
+
+    def from_blb_to_vertices(self, dims):
+        blb = self
+        blf = Coordinate(self.x + dims.width, self.y, self.z)
+        brb = Coordinate(self.x, self.y + dims.depth, self.z)
+        brf = Coordinate(self.x + dims.width, self.y + dims.depth, self.z)
+        tlb = Coordinate(self.x, self.y, self.z + dims.height)
+        tlf = Coordinate(self.x + dims.width, self.y, self.z + dims.height)
+        trb = Coordinate(self.x, self.y + dims.depth, self.z + dims.height)
+        trf = Coordinate(self.x + dims.width, self.y + dims.depth, self.z + dims.height)
+        return [blb, blf, brb, brf, tlb, tlf, trb, trf]
+
+    def to_numpy(self):
+        return np.array([self.x, self.y, self.z])
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -30,6 +79,99 @@ class Coordinate:
 
     def __repr__(self):
         return self.__str__()
+
+
+class Vertices:
+    def __init__(self, blb, dims):
+        assert isinstance(blb, Coordinate)
+        assert isinstance(dims, Dimension)
+        self.dims = dims
+        self.blb = blb
+        self.blf = Coordinate(self.blb.x + self.dims.width, self.blb.y, self.blb.z)
+        self.brb = Coordinate(self.blb.x, self.blb.y + self.dims.depth, self.blb.z)
+        self.brf = Coordinate(
+            self.blb.x + self.dims.width, self.blb.y + self.dims.depth, self.blb.z
+        )
+        self.tlb = Coordinate(self.blb.x, self.blb.y, self.blb.z + self.dims.height)
+        self.tlf = Coordinate(
+            self.blb.x + self.dims.width, self.blb.y, self.blb.z + self.dims.height
+        )
+        self.trb = Coordinate(
+            self.blb.x, self.blb.y + self.dims.depth, self.blb.z + self.dims.height
+        )
+        self.trf = Coordinate(
+            self.blb.x + self.dims.width,
+            self.blb.y + self.dims.depth,
+            self.blb.z + self.dims.height,
+        )
+        self.vertices = [
+            self.blb,
+            self.blf,
+            self.brb,
+            self.brf,
+            self.tlb,
+            self.tlf,
+            self.trb,
+            self.trf,
+        ]
+
+    def get_center(self):
+        return Coordinate(
+            self.blb.x + self.dims.width // 2,
+            self.blb.y + self.dims.depth // 2,
+            self.blb.z + self.dims.height // 2,
+        )
+
+    def get_xs(self):
+        return np.array([v.x for v in self.vertices])
+
+    def get_ys(self):
+        return np.array([v.y for v in self.vertices])
+
+    def get_zs(self):
+        return np.array([v.z for v in self.vertices])
+
+    def to_faces(self):
+        return np.array(
+            [
+                [
+                    self.blb.to_numpy(),
+                    self.blf.to_numpy(),
+                    self.brf.to_numpy(),
+                    self.brb.to_numpy(),
+                ],  # bottom
+                [
+                    self.tlb.to_numpy(),
+                    self.tlf.to_numpy(),
+                    self.trf.to_numpy(),
+                    self.trb.to_numpy(),
+                ],  # top
+                [
+                    self.blb.to_numpy(),
+                    self.brb.to_numpy(),
+                    self.trb.to_numpy(),
+                    self.tlb.to_numpy(),
+                ],  # back
+                [
+                    self.blf.to_numpy(),
+                    self.brf.to_numpy(),
+                    self.trf.to_numpy(),
+                    self.tlf.to_numpy(),
+                ],  # front
+                [
+                    self.blb.to_numpy(),
+                    self.blf.to_numpy(),
+                    self.tlf.to_numpy(),
+                    self.tlb.to_numpy(),
+                ],  # left
+                [
+                    self.brb.to_numpy(),
+                    self.brf.to_numpy(),
+                    self.trf.to_numpy(),
+                    self.trb.to_numpy(),
+                ],  # right
+            ]
+        )
 
 
 def argsort(seq):
@@ -76,7 +218,7 @@ def flatten(l):
             yield el
 
 
-def get_l0_lb(order, W, D, H):
+def get_l0_lb(order, pallet_dims):
     """
     L0 lower bound for the minimum number of required bins
 
@@ -84,10 +226,11 @@ def get_l0_lb(order, W, D, H):
     "The Three-Dimensional Bin Packing Problem",
     Operations Research, 1998.
     """
+    W, D, H = pallet_dims
     return np.ceil(order.volume.sum() / (W * D * H))
 
 
-def get_l1_lb(order, W, D, H):
+def get_l1_lb(order, pallet_dims):
     """
     L1 lower bound for the minimum number of required bins
 
@@ -120,13 +263,14 @@ def get_l1_lb(order, W, D, H):
 
     # The last two dimensions (D and H) are inverted, since
     # Martello specifies W x H x D, while we use W x D x H
+    W, D, H = pallet_dims
     l1wh = get_l1j2("width", W, "depth", D, "height", H)
     l1wd = get_l1j2("width", W, "height", H, "depth", D)
     l1hd = get_l1j2("depth", D, "height", H, "width", W)
     return max(l1wh, l1wd, l1hd), l1wh, l1wd, l1hd
 
 
-def get_l2_lb(order, W, D, H):
+def get_l2_lb(order, pallet_dims):
     """
     L2 lower bound for the minimum number of required bins
 
@@ -172,6 +316,7 @@ def get_l2_lb(order, W, D, H):
 
     # The last two dimensions (D and H) are inverted, since
     # Martello specifies W x H x D, while we use W x D x H
+    W, D, H = pallet_dims
     _, l1wh, l1wd, l1hd = get_l1_lb(order, W, D, H)
     l2wh = get_l2j2(l1wh, "width", W, "depth", D, "height", H)
     l2wd = get_l2j2(l1wd, "width", W, "height", H, "depth", D)
