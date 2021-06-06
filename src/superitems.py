@@ -235,8 +235,8 @@ class TwoHorizontalSuperitemWidth(HorizontalSuperitem):
 
     def get_items_coords(self, width=0, depth=0, height=0):
         i1, i2 = tuple(self.items)
-        d1 = i1.get_item_coords(width=width, depth=depth, height=height)
-        d2 = i2.get_item_coords(width=width + i1.width, depth=depth, height=height)
+        d1 = i1.get_items_coords(width=width, depth=depth, height=height)
+        d2 = i2.get_items_coords(width=width + i1.width, depth=depth, height=height)
         utils.check_duplicate_keys([d1, d2], "Duplicated item in the same superitem")
         return {**d1, **d2}
 
@@ -260,8 +260,8 @@ class TwoHorizontalSuperitemDepth(HorizontalSuperitem):
 
     def get_items_coords(self, width=0, depth=0, height=0):
         i1, i2 = tuple(self.items)
-        d1 = i1.get_item_coords(width=width, depth=depth, height=height)
-        d2 = i2.get_item_coords(width=width, depth=i1.depth + depth, height=height)
+        d1 = i1.get_items_coords(width=width, depth=depth, height=height)
+        d2 = i2.get_items_coords(width=width, depth=i1.depth + depth, height=height)
         utils.check_duplicate_keys([d1, d2], "Duplicated item in the same superitem")
         return {**d1, **d2}
 
@@ -285,10 +285,10 @@ class FourHorizontalSuperitem(HorizontalSuperitem):
 
     def get_items_coords(self, width=0, depth=0, height=0):
         i1, i2, i3, i4 = tuple(self.items)
-        d1 = i1.get_item_coords(width=width, depth=depth, height=height)
-        d2 = i2.get_item_coords(width=i1.width + width, depth=depth, height=height)
-        d3 = i3.get_item_coords(width=width, depth=i1.depth + depth, height=height)
-        d4 = i4.get_item_coords(width=i1.width + width, depth=i1.depth + depth, height=height)
+        d1 = i1.get_items_coords(width=width, depth=depth, height=height)
+        d2 = i2.get_items_coords(width=i1.width + width, depth=depth, height=height)
+        d3 = i3.get_items_coords(width=width, depth=i1.depth + depth, height=height)
+        d4 = i4.get_items_coords(width=i1.width + width, depth=i1.depth + depth, height=height)
         utils.check_duplicate_keys([d1, d2, d3, d4], "Duplicated item in the same superitem")
         return {**d1, **d2, **d3, **d4}
 
@@ -420,8 +420,8 @@ class SuperitemPool:
 
         # Add the "width * depth" column and sort superitems
         # in ascending order by that dimension
-        wd = [s.width * s.depth for s in superitems]
-        superitems = [superitems[i] for i in np.argsort(wd)]
+        wd = [(s.width, s.width * s.depth) for s in superitems]
+        superitems = [superitems[i] for i in utils.argsort(wd)]
 
         # Extract candidate groups made up of >= 2 items or superitems
         slices = []
@@ -429,12 +429,13 @@ class SuperitemPool:
             slices += [
                 tuple(superitems[i + j] for j in range(s))
                 for i in range(0, len(superitems) - (s - 1), s)
+                if superitems[i].width * superitems[i].depth
+                >= 0.7 * superitems[i + s - 1].width * superitems[i + s - 1].depth
             ]
 
         # Generate vertical superitems
-        for slice in slices:
-            if slice[0].width * slice[0].depth >= 0.7 * slice[-1].width * slice[-1].depth:
-                superitems_vertical += [VerticalSuperitem(slice)]
+        for slice in tqdm(slices, desc="Generating vertical superitems"):
+            superitems_vertical += [VerticalSuperitem(slice)]
 
         return superitems_vertical
 
@@ -468,6 +469,12 @@ class SuperitemPool:
         ), "The given set of superitems should be an instance of the SuperitemPool class"
         self.superitems.extend(superitems)
 
+    def pop(self, i):
+        """
+        Remove the superitem at the given index from the pool
+        """
+        self.superitems.pop(i)
+
     def get_fsi(self):
         """
         Return a binary matrix of superitems by items, s.t.
@@ -494,6 +501,16 @@ class SuperitemPool:
         ds = [s.depth for s in self.superitems]
         hs = [s.height for s in self.superitems]
         return ws, ds, hs
+
+    def get_superitems_containing_item(self, item_id):
+        """
+        Return a list of superitems containing the given raw item
+        """
+        superitems = []
+        for superitem in self.superitems:
+            if item_id in superitem.id:
+                superitems += [superitem]
+        return superitems
 
     def get_item_ids(self):
         """

@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import pandas as pd
 
@@ -38,7 +40,29 @@ class Layer:
         """
         Compute the 2D/3D density of the layer
         """
-        return self.volume / W * D * self.height if not two_dims else self.area / W * D
+        return self.volume / (W * D * self.height) if not two_dims else self.area / (W * D)
+
+    def remove(self, superitem):
+        """
+        Remove the given superitem from the layer
+        """
+        for i, s in enumerate(self.superitems_pool):
+            if s == superitem:
+                self.pop(i)
+                break
+
+    def pop(self, i):
+        """
+        Remove the superitem at the given index from the layer
+        """
+        self.superitems_pool.pop(i)
+        self.superitems_coords.pop(i)
+
+    def get_superitems_containing_item(self, item_id):
+        """
+        Return a list of superitems containing the given raw item
+        """
+        return self.superitems_pool.get_superitems_containing_item(item_id)
 
     @property
     def volume(self):
@@ -82,7 +106,7 @@ class LayerPool:
     A layer pool is a collection of layers
     """
 
-    def __init__(self, superitems_pool, layers=None, add_single=True):
+    def __init__(self, superitems_pool, layers=None, add_single=False):
         self.superitems_pool = superitems_pool
         self.layers = layers or []
         if add_single:
@@ -138,6 +162,12 @@ class LayerPool:
         self.layers.extend(layer_pool)
         self.superitems_pool.extend(layer_pool.superitems_pool)
 
+    def pop(self, i):
+        """
+        Remove the layer at the given index from the pool
+        """
+        self.layers.pop(i)
+
     def get_unique_items_ids(self):
         """
         Return the flattened list of item ids inside the layer pool
@@ -150,51 +180,51 @@ class LayerPool:
         """
         return [layer.get_density(W=W, D=D, two_dims=two_dims) for layer in self.layers]
 
-    def select_layers(self, W, D, min_density=0.5, two_dims=True):
-        # Sort layers by densities and keep only those with a
-        # density greater than or equal to the given minimum
+    def discard_by_densities(self, W, D, min_density=0.5, two_dims=True):
+        """
+        Sort layers by densities and keep only those with a
+        density greater than or equal to the given minimum
+        """
         densities = self.get_densities(W, D, two_dims=two_dims)
-        sorted_densities = np.array(densities).argsort()
-        sorted_layers = np.array(self.layers)[sorted_densities[::-1]]
-        sorted_layers = LayerPool(
+        sorted_indices = np.array(densities).argsort()[::-1]
+        sorted_densities = [densities[i] for i in sorted_indices]
+        sorted_layers = [self.layers[i] for i in sorted_indices]
+        return LayerPool(
             self.superitems_pool,
-            layers=[l for d, l in zip(densities, sorted_layers) if d >= min_density],
+            layers=[l for d, l in zip(sorted_densities, sorted_layers) if d >= min_density],
         )
 
-        # Discard layers after all items are covered
-        all_item_ids = sorted_layers.get_unique_items_ids()
-        item_coverage = dict(zip(all_item_ids, [False] * len(all_item_ids)))
-        selected_layers = LayerPool(self.superitems_pool)
-        for layer in sorted_layers:
-            # Stop when all items are covered
-            if all(list(item_coverage.values())):
-                break
-
-            # Update coverage
-            item_ids = layer.get_unique_items_ids()
-            for item in item_ids:
-                item_coverage[item] = True
-
-            # Add the current layer to the pool
-            # of selected layers
-            selected_layers.add(layer)
-
-        return selected_layers
-
-    def replace_items(self, superitems, max_item_coverage=3):
-        all_item_ids = self.get_item_ids(superitems)
+    def discard_by_coverage(self, max_coverage=3):
+        """
+        Post-process layers by their item coverage
+        """
+        all_item_ids = self.get_unique_items_ids()
         item_coverage = dict(zip(all_item_ids, [0] * len(all_item_ids)))
-        selected_layers = LayerPool()
+        selected_layers = LayerPool(self.superitems_pool)
         for layer in self.layers:
             to_select = True
-            item_ids = layer.get_item_ids(superitems)
+            already_covered = 0
 
-            # If at least one item in the layer was already selected
-            # more times than the maximum allowed value, then such layer
-            # is to be discarded
+            # Stop when all items are covered
+            if all([c > 0 for c in item_coverage.values()]):
+                break
+
+            item_ids = layer.get_unique_items_ids()
             for item in item_ids:
-                if item_coverage[item] >= max_item_coverage:
+                # If at least one item in the layer was already selected
+                # more times than the maximum allowed value, then such layer
+                # is to be discarded
+                if item_coverage[item] >= max_coverage:
                     to_select = False
+                    break
+
+                # If at least `max_coverage` items in the layer are already covered
+                # by previously selected layers, then such layer is to be discarded
+                if item_coverage[item] > 0:
+                    already_covered += 1
+                if already_covered >= max_coverage:
+                    to_select = False
+                    break
 
             # If the layer is selected, increase item coverage
             # for each item in such layer and add it to the pool
@@ -204,12 +234,34 @@ class LayerPool:
                 for item in item_ids:
                     item_coverage[item] += 1
 
-            ################################ TODO
-            # We also let each selected layer to have a maximum of 3
-            # items that are covered using the previously selected layers
-            # ##############################
-
         return selected_layers
+
+    def remove_duplicated_items(self):
+        """
+        Keep items that are covered multiple times only
+        in the layers with the highest densities
+        """
+        selected_layers = copy.deepcopy(self)
+        all_item_ids = selected_layers.get_unique_items_ids()
+        item_coverage = dict(zip(all_item_ids, [False] * len(all_item_ids)))
+        for layer in selected_layers.layers:
+            item_ids = layer.get_unique_items_ids()
+            for item in item_ids:
+                if item_coverage[item]:
+                    for s in layer.get_superitems_containing_item(item):
+                        layer.remove(s)
+                else:
+                    item_coverage[item] = True
+        return selected_layers
+
+    def select_layers(self, W, D, min_density=0.5, two_dims=True, max_coverage=3):
+        """
+        Perform post-processing steps to select the best layers in the pool
+        """
+        new_pool = self.discard_by_densities(W, D, min_density=min_density, two_dims=two_dims)
+        new_pool = new_pool.discard_by_coverage(max_coverage=max_coverage)
+        new_pool = new_pool.remove_duplicated_items()
+        return new_pool
 
     def to_dataframe(self):
         dfs = []
