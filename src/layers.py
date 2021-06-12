@@ -49,7 +49,9 @@ class Layer:
         """
         Compute the 2D/3D density of the layer
         """
-        return self.volume / (W * D * self.height) if not two_dims else self.area / (W * D)
+        return (
+            self.volume / (W * D * self.height) if not two_dims else self.area / (W * D)
+        )
 
     def remove(self, superitem):
         """
@@ -92,7 +94,15 @@ class Layer:
         ds = [items_dims[k].depth for k in keys]
         hs = [items_dims[k].height for k in keys]
         return pd.DataFrame(
-            {"item": keys, "x": xs, "y": ys, "z": zs, "width": ws, "depth": ds, "height": hs}
+            {
+                "item": keys,
+                "x": xs,
+                "y": ys,
+                "z": zs,
+                "width": ws,
+                "depth": ds,
+                "height": hs,
+            }
         )
 
     def __str__(self):
@@ -133,7 +143,9 @@ class LayerPool:
         and the same superitems pool
         """
         layers = [
-            l for i, l in enumerate(self.layers) if layer_indices is None or i in layer_indices
+            l
+            for i, l in enumerate(self.layers)
+            if layer_indices is None or i in layer_indices
         ]
         return LayerPool(self.superitems_pool, layers=layers, add_single=False)
 
@@ -174,7 +186,9 @@ class LayerPool:
         """
         Add the given Layer to the current pool
         """
-        assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
+        assert isinstance(
+            layer, Layer
+        ), "The given layer should be an instance of the Layer class"
         self.layers.append(layer)
 
     def extend(self, layer_pool):
@@ -197,7 +211,9 @@ class LayerPool:
         """
         Return the flattened list of item ids inside the layer pool
         """
-        return sorted(set(utils.flatten([layer.get_unique_items_ids() for layer in self.layers])))
+        return sorted(
+            set(utils.flatten([layer.get_unique_items_ids() for layer in self.layers]))
+        )
 
     def get_densities(self, W, D, two_dims=True):
         """
@@ -224,6 +240,7 @@ class LayerPool:
         for i, d in enumerate(densities):
             if d >= min_density:
                 last_index = i
+            else:
                 break
         return self.subset(list(range(last_index + 1)))
 
@@ -277,7 +294,7 @@ class LayerPool:
         selected_layers = copy.deepcopy(self)
         all_item_ids = selected_layers.get_unique_items_ids()
         item_coverage = dict(zip(all_item_ids, [False] * len(all_item_ids)))
-        for layer in selected_layers.layers:
+        for l, layer in enumerate(selected_layers.layers):
             item_ids = layer.get_unique_items_ids()
             for item in item_ids:
                 if item_coverage[item]:
@@ -287,13 +304,27 @@ class LayerPool:
                     item_coverage[item] = True
         return selected_layers
 
+    def remove_empty_layers(self):
+        """
+        Check and remove layers without any items
+        """
+        selected_layers = copy.deepcopy(self)
+        not_empty_layers = []
+        for l, layer in enumerate(selected_layers.layers):
+            if layer.volume != 0:
+                not_empty_layers.append(l)
+        return selected_layers.subset(not_empty_layers)
+
     def select_layers(self, W, D, min_density=0.5, two_dims=True, max_coverage=3):
         """
         Perform post-processing steps to select the best layers in the pool
         """
-        new_pool = self.discard_by_densities(W, D, min_density=min_density, two_dims=two_dims)
+        new_pool = self.discard_by_densities(
+            W, D, min_density=min_density, two_dims=two_dims
+        )
         new_pool = new_pool.discard_by_coverage(max_coverage=max_coverage)
         new_pool = new_pool.remove_duplicated_items()
+        new_pool = new_pool.remove_empty_layers()
         new_pool.sort_by_densities(W, D, two_dims=two_dims)
         return new_pool
 
@@ -323,5 +354,7 @@ class LayerPool:
         return self.layers[i]
 
     def __setitem__(self, i, e):
-        assert isinstance(e, Layer), "The given layer should be an instance of the Layer class"
+        assert isinstance(
+            e, Layer
+        ), "The given layer should be an instance of the Layer class"
         self.layers[i] = e

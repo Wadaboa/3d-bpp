@@ -81,6 +81,12 @@ class Bin:
     def to_dataframe(self):
         return self.layer_pool.to_dataframe(zs=self.get_layer_zs())
 
+    def __str__(self):
+        return f"Bin({self.layer_pool})"
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class BinPool:
     """
@@ -127,3 +133,24 @@ class BinPool:
             df["bin"] = [i] * len(df)
             dfs += [df]
         return pd.concat(dfs, axis=0)
+
+    def __str__(self):
+        return f"BinPool(bins={self.bins})"
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __len__(self):
+        return len(self.bins)
+
+    def __contains__(self, bin):
+        return bin in self.bins
+
+    def __getitem__(self, i):
+        return self.bins[i]
+
+    def __setitem__(self, i, e):
+        assert isinstance(
+            e, Bin
+        ), "The given bin should be an instance of the Bin class"
+        self.bins[i] = e

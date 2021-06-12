@@ -5,7 +5,7 @@ from rectpack.maxrects import MaxRectsBaf
 from . import utils, layers, superitems
 
 
-def get_height_groups(superitems_pool, height_tol=0):
+def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.5):
     """
     Divide the whole pool of superitems into groups having either
     the exact same height or an height within the given tolerance
@@ -16,17 +16,27 @@ def get_height_groups(superitems_pool, height_tol=0):
         h: {k for k in unique_heights[i:] if k - h <= height_tol}
         for i, h in enumerate(unique_heights)
     }
-    for (i, hi), (j, hj) in zip(list(height_sets.items())[:-1], list(height_sets.items())[1:]):
+    for (i, hi), (j, hj) in zip(
+        list(height_sets.items())[:-1], list(height_sets.items())[1:]
+    ):
         if hj.issubset(hi):
             unique_heights.remove(j)
 
     # Generate one group of superitems for each similar height
     groups = []
     for height in unique_heights:
-        pool = [
-            s for s in superitems_pool if s.height >= height and s.height <= height + height_tol
+        spool = [
+            s
+            for s in superitems_pool
+            if s.height >= height and s.height <= height + height_tol
         ]
-        groups += [superitems.SuperitemPool(superitems=pool)]
+        spool = superitems.SuperitemPool(superitems=spool)
+        pallet_width, pallet_depth, _ = pallet_dims
+        if (
+            sum(s.volume for s in spool)
+            >= density_tol * spool.get_max_height() * pallet_width * pallet_depth
+        ):
+            groups += [spool]
 
     return groups
 

@@ -29,7 +29,10 @@ class Item:
         Return a list of Item objects from a Pandas DataFrame
         having the expected columns
         """
-        return [Item(i.name, i.width, i.depth, i.height, i.weight) for _, i in order.iterrows()]
+        return [
+            Item(i.name, i.width, i.depth, i.height, i.weight)
+            for _, i in order.iterrows()
+        ]
 
     @property
     def width(self):
@@ -95,12 +98,16 @@ class Superitem:
         raise NotImplementedError()
 
     @property
+    def enclosing_volume(self):
+        raise NotImplementedError()
+
+    @property
     def weight(self):
         return sum(i.weight for i in self.items)
 
     @property
     def volume(self):
-        return int(self.width * self.depth * self.height)
+        return sum(i.volume for i in self.items)
 
     @property
     def id(self):
@@ -122,7 +129,9 @@ class Superitem:
         all_dims = dict()
         for i in range(len(self.items)):
             dims = self.items[i].get_items_dims()
-            utils.check_duplicate_keys([all_dims, dims], "Duplicated item in the same superitem")
+            utils.check_duplicate_keys(
+                [all_dims, dims], "Duplicated item in the same superitem"
+            )
             all_dims = {**all_dims, **dims}
         return all_dims
 
@@ -171,6 +180,10 @@ class SingleItemSuperitem(Superitem):
     def height(self):
         return max(i.height for i in self.items)
 
+    @property
+    def enclosing_volume(self):
+        return self.volume
+
     def get_items_coords(self, width=0, depth=0, height=0):
         return {self.items[0].id: utils.Coordinate(width, depth, height)}
 
@@ -190,6 +203,10 @@ class HorizontalSuperitem(Superitem):
     @property
     def height(self):
         return max(i.height for i in self.items)
+
+    @property
+    def enclosing_volume(self):
+        return self.volume
 
 
 class TwoHorizontalSuperitemWidth(HorizontalSuperitem):
@@ -264,8 +281,12 @@ class FourHorizontalSuperitem(HorizontalSuperitem):
         d1 = i1.get_items_coords(width=width, depth=depth, height=height)
         d2 = i2.get_items_coords(width=i1.width + width, depth=depth, height=height)
         d3 = i3.get_items_coords(width=width, depth=i1.depth + depth, height=height)
-        d4 = i4.get_items_coords(width=i1.width + width, depth=i1.depth + depth, height=height)
-        utils.check_duplicate_keys([d1, d2, d3, d4], "Duplicated item in the same superitem")
+        d4 = i4.get_items_coords(
+            width=i1.width + width, depth=i1.depth + depth, height=height
+        )
+        utils.check_duplicate_keys(
+            [d1, d2, d3, d4], "Duplicated item in the same superitem"
+        )
         return {**d1, **d2, **d3, **d4}
 
 
@@ -289,6 +310,10 @@ class VerticalSuperitem(Superitem):
     @property
     def height(self):
         return sum(i.height for i in self.items)
+
+    @property
+    def enclosing_volume(self):
+        return self.width * self.depth * self.height
 
     def get_items_coords(self, width=0, depth=0, height=0):
         # Adjust coordinates to account for stacking tolerance
@@ -320,16 +345,21 @@ class SuperitemPool:
         max_vstacked=2,
         superitems=None,
         only_single=False,
+        not_horizontal=False,
     ):
         self.superitems = (
-            self._gen_superitems(order, pallet_dims, max_vstacked, only_single)
+            self._gen_superitems(
+                order, pallet_dims, max_vstacked, only_single, not_horizontal
+            )
             if order is not None
             else superitems
             if superitems is not None
             else []
         )
 
-    def _gen_superitems(self, order, pallet_dims, max_vstacked, only_single):
+    def _gen_superitems(
+        self, order, pallet_dims, max_vstacked, only_single, not_horizontal
+    ):
         """
         Generate horizontal and vertical superitems and
         filter the ones exceeding the pallet dimensions
@@ -338,11 +368,21 @@ class SuperitemPool:
         single_items_superitems = self._gen_single_items_superitems(items)
         if only_single:
             return single_items_superitems
-        superitems_horizontal = self._gen_superitems_horizontal(single_items_superitems)
-        superitems_vertical = self._gen_superitems_vertical(
-            single_items_superitems + superitems_horizontal, max_vstacked
-        )
-        superitems = single_items_superitems + superitems_horizontal + superitems_vertical
+        if not_horizontal:
+            superitems_vertical = self._gen_superitems_vertical(
+                single_items_superitems, max_vstacked
+            )
+            superitems = single_items_superitems + superitems_vertical
+        else:
+            superitems_horizontal = self._gen_superitems_horizontal(
+                single_items_superitems
+            )
+            superitems_vertical = self._gen_superitems_vertical(
+                single_items_superitems + superitems_horizontal, max_vstacked
+            )
+            superitems = (
+                single_items_superitems + superitems_horizontal + superitems_vertical
+            )
         if pallet_dims is not None:
             superitems = self._filter_superitems(superitems, pallet_dims)
         return superitems
@@ -371,7 +411,8 @@ class SuperitemPool:
         two_slices, four_slices = [], []
         for _, indexes in same_dims.items():
             two_slices += [
-                (items[indexes[i]], items[indexes[i + 1]]) for i in range(0, len(indexes) - 1, 2)
+                (items[indexes[i]], items[indexes[i + 1]])
+                for i in range(0, len(indexes) - 1, 2)
             ]
             four_slices += [
                 (
@@ -398,31 +439,55 @@ class SuperitemPool:
 
     def _gen_superitems_vertical(self, superitems, max_vstacked):
         """
-        Vertically stack groups of >= 2 items or superitems with the
-        same dimensions to form a taller superitem
+        Divide superitems by 'with-depth' ratio and Vertically stack each group
         """
-        superitems_vertical = []
 
-        # Add the "width * depth" column and sort superitems
-        # in ascending order by that dimension
-        wd = [(s.width, s.width * s.depth) for s in superitems]
-        superitems = [superitems[i] for i in utils.argsort(wd)]
+        def _gen_superitems_vertical_subgroup(superitems, max_vstacked):
+            """
+            Vertically stack groups of >= 2 items or superitems with the
+            same dimensions to form a taller superitem
+            """
+            superitems_vertical = []
 
-        # Extract candidate groups made up of >= 2 items or superitems
-        slices = []
-        for s in range(2, max_vstacked + 1):
-            slices += [
-                tuple(superitems[i + j] for j in range(s))
-                for i in range(0, len(superitems) - (s - 1), s)
-                if superitems[i].width * superitems[i].depth
-                >= 0.7 * superitems[i + s - 1].width * superitems[i + s - 1].depth
-            ]
+            # Add the "width * depth" column and sort superitems
+            # in ascending order by that dimension
+            wd = [s.width * s.depth for s in superitems]
+            superitems = [superitems[i] for i in utils.argsort(wd)]
 
-        # Generate vertical superitems
-        for slice in tqdm(slices, desc="Generating vertical superitems"):
-            superitems_vertical += [VerticalSuperitem(slice)]
+            # Extract candidate groups made up of >= 2 items or superitems
+            slices = []
+            for s in range(2, max_vstacked + 1):
+                for i in range(0, len(superitems) - (s - 1), s):
+                    good = True
+                    for j in range(1, s, 1):
+                        if (
+                            superitems[i + j].width * superitems[i + j].depth
+                            >= superitems[i].width * superitems[i].depth
+                        ) and (
+                            superitems[i].width * superitems[i].depth
+                            <= 0.7 * superitems[i + j].width * superitems[i + j].depth
+                        ):
+                            good = False
+                            break
+                    if good:
+                        slices += [tuple(superitems[i + j] for j in range(s))]
 
-        return superitems_vertical
+            # Generate vertical superitems
+            for slice in tqdm(slices, desc="Generating vertical superitems"):
+                superitems_vertical += [VerticalSuperitem(slice)]
+
+            return superitems_vertical
+
+        wider_superitems = []
+        deeper_superitems = []
+        for s in superitems:
+            if s.width / s.depth >= 1:
+                wider_superitems.append(s)
+            else:
+                deeper_superitems.append(s)
+        return _gen_superitems_vertical_subgroup(
+            wider_superitems, max_vstacked
+        ) + _gen_superitems_vertical_subgroup(deeper_superitems, max_vstacked)
 
     def _filter_superitems(self, superitems, pallet_dims):
         """
@@ -433,7 +498,9 @@ class SuperitemPool:
         return [
             s
             for s in superitems
-            if s.width <= pallet_width and s.depth <= pallet_depth and s.height <= pallet_height
+            if s.width <= pallet_width
+            and s.depth <= pallet_depth
+            and s.height <= pallet_height
         ]
 
     def add(self, superitem):
@@ -515,6 +582,12 @@ class SuperitemPool:
         """
         return len(self.get_unique_item_ids())
 
+    def get_volume(self):
+        """
+        Return the sum of the volume of the superitems in the pool
+        """
+        return sum(s.volume for s in self.superitems)
+
     def get_max_height(self):
         """
         Return the maximum height of the superitems in the pool
@@ -528,7 +601,9 @@ class SuperitemPool:
         ws, ds, hs = self.get_superitems_dims()
         ids = self.get_item_ids()
         types = [s.__class__.__name__ for s in self.superitems]
-        return pd.DataFrame({"width": ws, "depth": ds, "height": hs, "ids": ids, "type": types})
+        return pd.DataFrame(
+            {"width": ws, "depth": ds, "height": hs, "ids": ids, "type": types}
+        )
 
     def __len__(self):
         return len(self.superitems)
