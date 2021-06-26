@@ -153,6 +153,9 @@ class Superitem:
     def __repr__(self):
         return self.__str__()
 
+    def __hash__(self):
+        return sum(hash(str(i)) for i in self.id)
+
 
 class SingleItemSuperitem(Superitem):
     """
@@ -493,7 +496,8 @@ class SuperitemPool:
         assert isinstance(
             superitem, Superitem
         ), "The given superitem should be an instance of the Superitem class"
-        self.superitems.append(superitem)
+        if superitem not in self.superitems:
+            self.superitems.append(superitem)
 
     def extend(self, superitems):
         """
@@ -502,7 +506,8 @@ class SuperitemPool:
         assert isinstance(superitems, SuperitemPool) or isinstance(
             superitems, list
         ), "The given set of superitems should be an instance of the SuperitemPool class"
-        self.superitems.extend(superitems)
+        for superitem in superitems:
+            self.add(superitem)
 
     def pop(self, i):
         """

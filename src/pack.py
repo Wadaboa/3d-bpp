@@ -1,9 +1,10 @@
+from operator import add
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from . import utils
+from . import utils, superitems, layers, warm_start
 
 
 class Bin:
@@ -95,18 +96,19 @@ class BinPool:
 
     def __init__(self, layer_pool, pallet_dims):
         self.layer_pool = layer_pool
-        layer_pool.sort_by_densities(pallet_dims[0], pallet_dims[1])
+        self.layer_pool.sort_by_densities(pallet_dims[0], pallet_dims[1])
         self.pallet_dims = pallet_dims
-        self.bins = self._build()
+        self.bins = self._build(self.layer_pool)
+        self.top_layer_pool = self._place_not_covered()
 
-    def _build(self):
+    def _build(self, layer_pool):
         """
         Iteratively build the bin pool by placing
         the given layers
         """
         bins = []
         _, _, pallet_height = self.pallet_dims
-        for i, layer in enumerate(self.layer_pool):
+        for i, layer in enumerate(layer_pool):
             placed = False
 
             # Place the layer in an already opened bin
@@ -117,9 +119,77 @@ class BinPool:
 
             # Open a new bin
             if not placed:
-                bins += [Bin(self.layer_pool.subset([i]))]
+                bins += [Bin(layer_pool.subset([i]))]
 
         return bins
+
+    #### TODO
+    # - Astrarre generazione layer in else in funzione
+    # - Gestire altezza rimanente e altezza nuovo layer
+    def _place_not_covered(self):
+        layer_pool = layers.LayerPool(self.layer_pool.superitems_pool)
+        pallet_width, pallet_depth, pallet_height = self.pallet_dims
+
+        # Sort superitems by descending height
+        superitems_list = self.layer_pool.not_covered_single_superitems()
+        heights = [s.height for s in superitems_list]
+        superitems_list = [superitems_list[i] for i in utils.argsort(heights, reverse=True)]
+
+        # Get bins with the maximum spare height
+        remaining_heights = [pallet_height - b.height for b in self.bins]
+        sorted_indices = utils.argsort(remaining_heights, reverse=True)
+
+        # Try to place items on top of existing bins
+        remaining_items = []
+        to_place_in_new_layer = []
+        working_bin = sorted_indices[0]
+        for s in superitems_list:
+            if s.height > remaining_heights[working_bin]:
+                remaining_items += [s]
+            else:
+                last_layer_area = (
+                    self.bins[working_bin]
+                    .layer_pool[-1]
+                    .get_density(pallet_width, pallet_depth, two_dims=True)
+                )
+                area = sum(s.width * s.depth for s in to_place_in_new_layer)
+                if area < pallet_width * pallet_depth:  # last_layer_area:
+                    to_place_in_new_layer += [s]
+                else:
+                    spool = superitems.SuperitemPool(superitems=to_place_in_new_layer)
+                    ws, ds, _ = spool.get_superitems_dims()
+                    placed, layer = utils.maxrects_single_layer(
+                        spool, ws, ds, pallet_width, pallet_depth
+                    )
+                    assert placed, "Couldn't arrange items in a single layer"
+                    layer_pool.add(layer)
+                    self.bins[working_bin].add(layer)
+                    remaining_heights = [pallet_height - b.height for b in self.bins]
+                    sorted_indices = utils.argsort(remaining_heights, reverse=True)
+                    working_bin = sorted_indices[0]
+                    to_place_in_new_layer = []
+
+        #
+        if len(to_place_in_new_layer) > 0:
+            print(to_place_in_new_layer)
+            spool = superitems.SuperitemPool(superitems=to_place_in_new_layer)
+            ws, ds, _ = spool.get_superitems_dims()
+            placed, layer = utils.maxrects_single_layer(spool, ws, ds, pallet_width, pallet_depth)
+            assert placed, "Couldn't arrange items in a single layer"
+            layer_pool.add(layer)
+            self.bins[working_bin].add(layer)
+            to_place_in_new_layer = []
+
+        # Place remaining items in a new bin
+        remaining_items += to_place_in_new_layer
+        if len(remaining_items) > 0:
+            spool = superitems.SuperitemPool(superitems=remaining_items)
+            lpool = warm_start.maxrects(spool, self.pallet_dims, add_single=False)
+            for l in lpool:
+                layer_pool.add(l)
+            self.bins += self._build(lpool)
+
+        return layer_pool
 
     def plot(self):
         for bin in self.bins:
@@ -150,7 +220,5 @@ class BinPool:
         return self.bins[i]
 
     def __setitem__(self, i, e):
-        assert isinstance(
-            e, Bin
-        ), "The given bin should be an instance of the Bin class"
+        assert isinstance(e, Bin), "The given bin should be an instance of the Bin class"
         self.bins[i] = e

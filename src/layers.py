@@ -194,7 +194,8 @@ class LayerPool:
         Add the given Layer to the current pool
         """
         assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
-        self.layers.append(layer)
+        if layer not in self.layers:
+            self.layers.append(layer)
 
     def extend(self, layer_pool):
         """
@@ -203,7 +204,8 @@ class LayerPool:
         assert isinstance(
             layer_pool, LayerPool
         ), "The given set of layers should be an instance of the LayerPool class"
-        self.layers.extend(layer_pool)
+        for layer in layer_pool:
+            self.add(layer)
         self.superitems_pool.extend(layer_pool.superitems_pool)
 
     def pop(self, i):
@@ -216,7 +218,7 @@ class LayerPool:
         """
         Return the flattened list of item ids inside the layer pool
         """
-        return sorted(set(utils.flatten([layer.get_unique_items_ids() for layer in self.layers])))
+        return self.superitems_pool.get_unique_item_ids()
 
     def get_densities(self, W, D, two_dims=True):
         """
@@ -226,7 +228,7 @@ class LayerPool:
 
     def sort_by_densities(self, W, D, two_dims=True):
         """
-        Sort layers in the pool by density
+        Sort layers in the pool by decreasing density
         """
         densities = self.get_densities(W, D, two_dims=two_dims)
         sorted_indices = np.array(densities).argsort()[::-1]
@@ -323,7 +325,7 @@ class LayerPool:
 
         # Remove edited layers that do not respect the minimum
         # density requirement after removing at least one superitem
-        for l in to_remove:
+        for l in sorted(to_remove, reverse=True):
             selected_layers.pop(l)
 
         return selected_layers
@@ -339,16 +341,42 @@ class LayerPool:
                 not_empty_layers.append(l)
         return selected_layers.subset(not_empty_layers)
 
-    def select_layers(self, W, D, min_density=0.5, two_dims=True, max_coverage=3):
+    def select_layers(
+        self, W, D, min_density=0.5, two_dims=True, max_coverage=3, remove_duplicated=True
+    ):
         """
         Perform post-processing steps to select the best layers in the pool
         """
         new_pool = self.discard_by_densities(W, D, min_density=min_density, two_dims=two_dims)
         new_pool = new_pool.discard_by_coverage(max_coverage=max_coverage)
-        new_pool = new_pool.remove_duplicated_items(W, D)
+        if remove_duplicated:
+            new_pool = new_pool.remove_duplicated_items(W, D)
         new_pool = new_pool.remove_empty_layers()
         new_pool.sort_by_densities(W, D, two_dims=two_dims)
         return new_pool
+
+    def item_coverage(self):
+        """
+        Return a dictionary {i: T/F} identifying whether or not
+        item i is included in a layer in the pool
+        """
+        all_item_ids = self.get_unique_items_ids()
+        item_coverage = dict(zip(all_item_ids, [False] * len(all_item_ids)))
+        for layer in self.layers:
+            item_ids = layer.get_unique_items_ids()
+            for item in item_ids:
+                item_coverage[item] = True
+        return item_coverage
+
+    def not_covered_single_superitems(self):
+        item_coverage = self.item_coverage()
+        not_covered_ids = [k for k, v in item_coverage.items() if not v]
+        not_covered = set()
+        for s in self.superitems_pool:
+            for i in not_covered_ids:
+                if s.id == [i]:
+                    not_covered.add(s)
+        return list(not_covered)
 
     def to_dataframe(self, zs=None):
         if zs is None:

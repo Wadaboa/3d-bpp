@@ -178,11 +178,11 @@ class Vertices:
         )
 
 
-def argsort(seq):
+def argsort(seq, reverse=False):
     """
     Sort the given array and return indices instead of values
     """
-    return sorted(range(len(seq)), key=seq.__getitem__)
+    return sorted(range(len(seq)), key=seq.__getitem__, reverse=reverse)
 
 
 def check_duplicate_keys(dicts, err_msg):
