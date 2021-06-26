@@ -29,10 +29,7 @@ class Item:
         Return a list of Item objects from a Pandas DataFrame
         having the expected columns
         """
-        return [
-            Item(i.name, i.width, i.depth, i.height, i.weight)
-            for _, i in order.iterrows()
-        ]
+        return [Item(i.name, i.width, i.depth, i.height, i.weight) for _, i in order.iterrows()]
 
     @property
     def width(self):
@@ -129,9 +126,7 @@ class Superitem:
         all_dims = dict()
         for i in range(len(self.items)):
             dims = self.items[i].get_items_dims()
-            utils.check_duplicate_keys(
-                [all_dims, dims], "Duplicated item in the same superitem"
-            )
+            utils.check_duplicate_keys([all_dims, dims], "Duplicated item in the same superitem")
             all_dims = {**all_dims, **dims}
         return all_dims
 
@@ -281,12 +276,8 @@ class FourHorizontalSuperitem(HorizontalSuperitem):
         d1 = i1.get_items_coords(width=width, depth=depth, height=height)
         d2 = i2.get_items_coords(width=i1.width + width, depth=depth, height=height)
         d3 = i3.get_items_coords(width=width, depth=i1.depth + depth, height=height)
-        d4 = i4.get_items_coords(
-            width=i1.width + width, depth=i1.depth + depth, height=height
-        )
-        utils.check_duplicate_keys(
-            [d1, d2, d3, d4], "Duplicated item in the same superitem"
-        )
+        d4 = i4.get_items_coords(width=i1.width + width, depth=i1.depth + depth, height=height)
+        utils.check_duplicate_keys([d1, d2, d3, d4], "Duplicated item in the same superitem")
         return {**d1, **d2, **d3, **d4}
 
 
@@ -319,9 +310,11 @@ class VerticalSuperitem(Superitem):
         # Adjust coordinates to account for stacking tolerance
         all_coords = dict()
         for i in range(len(self.items)):
+            width_offset = ((self.width - self.items[i].width) // 2) + width
+            depth_offset = ((self.depth - self.items[i].depth) // 2) + depth
             coords = self.items[i].get_items_coords(
-                width=width,
-                depth=depth,
+                width=width_offset,
+                depth=depth_offset,
                 height=height,
             )
             utils.check_duplicate_keys(
@@ -348,18 +341,14 @@ class SuperitemPool:
         not_horizontal=False,
     ):
         self.superitems = (
-            self._gen_superitems(
-                order, pallet_dims, max_vstacked, only_single, not_horizontal
-            )
+            self._gen_superitems(order, pallet_dims, max_vstacked, only_single, not_horizontal)
             if order is not None
             else superitems
             if superitems is not None
             else []
         )
 
-    def _gen_superitems(
-        self, order, pallet_dims, max_vstacked, only_single, not_horizontal
-    ):
+    def _gen_superitems(self, order, pallet_dims, max_vstacked, only_single, not_horizontal):
         """
         Generate horizontal and vertical superitems and
         filter the ones exceeding the pallet dimensions
@@ -374,15 +363,11 @@ class SuperitemPool:
             )
             superitems = single_items_superitems + superitems_vertical
         else:
-            superitems_horizontal = self._gen_superitems_horizontal(
-                single_items_superitems
-            )
+            superitems_horizontal = self._gen_superitems_horizontal(single_items_superitems)
             superitems_vertical = self._gen_superitems_vertical(
                 single_items_superitems + superitems_horizontal, max_vstacked
             )
-            superitems = (
-                single_items_superitems + superitems_horizontal + superitems_vertical
-            )
+            superitems = single_items_superitems + superitems_horizontal + superitems_vertical
         if pallet_dims is not None:
             superitems = self._filter_superitems(superitems, pallet_dims)
         return superitems
@@ -411,8 +396,7 @@ class SuperitemPool:
         two_slices, four_slices = [], []
         for _, indexes in same_dims.items():
             two_slices += [
-                (items[indexes[i]], items[indexes[i + 1]])
-                for i in range(0, len(indexes) - 1, 2)
+                (items[indexes[i]], items[indexes[i + 1]]) for i in range(0, len(indexes) - 1, 2)
             ]
             four_slices += [
                 (
@@ -437,12 +421,12 @@ class SuperitemPool:
 
         return superitems_horizontal
 
-    def _gen_superitems_vertical(self, superitems, max_vstacked):
+    def _gen_superitems_vertical(self, superitems, max_vstacked, tol=0.7):
         """
         Divide superitems by 'with-depth' ratio and Vertically stack each group
         """
 
-        def _gen_superitems_vertical_subgroup(superitems, max_vstacked):
+        def _gen_superitems_vertical_subgroup(superitems):
             """
             Vertically stack groups of >= 2 items or superitems with the
             same dimensions to form a taller superitem
@@ -478,16 +462,17 @@ class SuperitemPool:
 
             return superitems_vertical
 
-        wider_superitems = []
-        deeper_superitems = []
+        wide_superitems = []
+        deep_superitems = []
         for s in superitems:
             if s.width / s.depth >= 1:
-                wider_superitems.append(s)
+                wide_superitems.append(s)
             else:
-                deeper_superitems.append(s)
+                deep_superitems.append(s)
+
         return _gen_superitems_vertical_subgroup(
-            wider_superitems, max_vstacked
-        ) + _gen_superitems_vertical_subgroup(deeper_superitems, max_vstacked)
+            wide_superitems
+        ) + _gen_superitems_vertical_subgroup(deep_superitems)
 
     def _filter_superitems(self, superitems, pallet_dims):
         """
@@ -498,9 +483,7 @@ class SuperitemPool:
         return [
             s
             for s in superitems
-            if s.width <= pallet_width
-            and s.depth <= pallet_depth
-            and s.height <= pallet_height
+            if s.width <= pallet_width and s.depth <= pallet_depth and s.height <= pallet_height
         ]
 
     def add(self, superitem):
@@ -601,9 +584,7 @@ class SuperitemPool:
         ws, ds, hs = self.get_superitems_dims()
         ids = self.get_item_ids()
         types = [s.__class__.__name__ for s in self.superitems]
-        return pd.DataFrame(
-            {"width": ws, "depth": ds, "height": hs, "ids": ids, "type": types}
-        )
+        return pd.DataFrame({"width": ws, "depth": ds, "height": hs, "ids": ids, "type": types})
 
     def __len__(self):
         return len(self.superitems)

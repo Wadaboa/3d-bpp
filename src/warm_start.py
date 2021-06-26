@@ -16,9 +16,7 @@ def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.
         h: {k for k in unique_heights[i:] if k - h <= height_tol}
         for i, h in enumerate(unique_heights)
     }
-    for (i, hi), (j, hj) in zip(
-        list(height_sets.items())[:-1], list(height_sets.items())[1:]
-    ):
+    for (i, hi), (j, hj) in zip(list(height_sets.items())[:-1], list(height_sets.items())[1:]):
         if hj.issubset(hi):
             unique_heights.remove(j)
 
@@ -26,9 +24,7 @@ def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.
     groups = []
     for height in unique_heights:
         spool = [
-            s
-            for s in superitems_pool
-            if s.height >= height and s.height <= height + height_tol
+            s for s in superitems_pool if s.height >= height and s.height <= height + height_tol
         ]
         spool = superitems.SuperitemPool(superitems=spool)
         pallet_width, pallet_depth, _ = pallet_dims
@@ -71,11 +67,13 @@ def maxrects(superitems_pool, pallet_dims, add_single=True):
     Given a superitems pool and the maximum dimensions to pack them into,
     return a layer pool with warm start placements
     """
-    # Build a layer pool and return it if we are dealing
-    # with a single superitem
-    layer_pool = layers.LayerPool(superitems_pool, add_single=add_single)
+    # Return a layer with a single item if only one
+    # is present in the superitems pool
     if len(superitems_pool) == 1:
-        return layer_pool
+        return layers.LayerPool(superitems_pool, add_single=True)
+
+    # Build initial layer pool
+    layer_pool = layers.LayerPool(superitems_pool, add_single=add_single)
 
     # Create the maxrects packing algorithm
     packer = newPacker(

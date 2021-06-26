@@ -3,8 +3,6 @@ import pandas as pd
 from ortools.sat.python import cp_model
 from ortools.linear_solver import pywraplp
 from tqdm import tqdm
-from rectpack import newPacker, PackingMode, PackingBin, SORT_AREA
-from rectpack.maxrects import MaxRectsBaf
 
 from . import layers, superitems, utils
 
@@ -83,9 +81,7 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
     return sol, slv.WallTime() / 1000, duals
 
 
-def pricing_problem_no_placement(
-    fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None
-):
+def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None):
     # Solver
     slv = pywraplp.Solver.CreateSolver("CBC")
 
@@ -111,13 +107,9 @@ def pricing_problem_no_placement(
         slv.Add(sum(zsl[s] for s in range(n_superitems)) <= feasibility - 1)
 
     # Compute reward for greater number of selected superitems
-    upper_bound_reward = (
-        min(duals[i] for i in range(n_items) if duals[i] > 0) + n_superitems
-    )
+    upper_bound_reward = min(duals[i] for i in range(n_items) if duals[i] > 0) + n_superitems
     reward = (
-        sum(
-            zsl[s] for i in range(n_items) for s in range(n_superitems) if duals[i] == 0
-        )
+        sum(zsl[s] for i in range(n_items) for s in range(n_superitems) if duals[i] == 0)
         / upper_bound_reward
     )
     print(
@@ -127,11 +119,7 @@ def pricing_problem_no_placement(
     # Objective
     obj = (
         ol
-        - sum(
-            duals[i] * fsi[s, i] * zsl[s]
-            for i in range(n_items)
-            for s in range(n_superitems)
-        )
+        - sum(duals[i] * fsi[s, i] * zsl[s] for i in range(n_items) for s in range(n_superitems))
         - reward
     )
     slv.Minimize(obj)
@@ -254,9 +242,7 @@ def pricing_problem_placement(
     for s in superitems_in_layer:
         for j in superitems_in_layer:
             if j > s:
-                slv.Add(
-                    xsj[s, j] + xsj[j, s] + ysj[s, j] + ysj[j, s] >= zsl[s] + zsl[j] - 1
-                )
+                slv.Add(xsj[s, j] + xsj[j, s] + ysj[s, j] + ysj[j, s] >= zsl[s] + zsl[j] - 1)
 
     # Ensure that there is at most one spatial relationship
     # between items i and j along the width and depth dimensions
@@ -275,9 +261,7 @@ def pricing_problem_placement(
 
     # Objective
     obj = layer_height - sum(
-        duals[i] * fsi[s, i] * zsl[s]
-        for i in items_in_layer
-        for s in superitems_in_layer
+        duals[i] * fsi[s, i] * zsl[s] for i in items_in_layer for s in superitems_in_layer
     )
     slv.Minimize(obj)
 
@@ -316,13 +300,17 @@ def column_generation(
 
     n_superitems, n_items = fsi.shape
     best_rmp_obj, num_stag_iters = float("inf"), 0
-    for _ in tqdm(range(max_iter)):
+    for i in range(max_iter):
+        print(f"Iteration {i + 1}/{max_iter}")
+
         # Reduced master problem
         print("Solving RMP...")
-        rmp_sol, rmp_time, duals = main_problem(
-            fsi, zsl, ol, tlim=tlim, relaxation=True
-        )
+        rmp_sol, rmp_time, duals = main_problem(fsi, zsl, ol, tlim=tlim, relaxation=True)
+        if rmp_sol is None:
+            print("Unfeasible main problem")
+            break
         print("Duals:", duals)
+        print("RMP time:", rmp_time)
 
         # Keep best RMP objective value
         if rmp_sol["objective"] < best_rmp_obj:
@@ -348,9 +336,8 @@ def column_generation(
             sp_np_sol, sp_np_time = pricing_problem_no_placement(
                 fsi, ws, ds, hs, W, D, duals, feasibility=feasibility, tlim=tlim
             )
-            superitems_in_layer = [
-                s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1
-            ]
+            print("SP no placement time:", sp_np_time)
+            superitems_in_layer = [s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1]
             feasibility = len(superitems_in_layer)
 
             # Non-negative reduced cost
@@ -359,8 +346,13 @@ def column_generation(
                 print("Reached convergence :)")
                 return layer_pool, best_rmp_obj
             if use_maxrect:
-                placed, layer = maxrect_placement(
-                    layer_pool.superitems_pool, superitems_in_layer, ws, ds, W, D
+                placed, layer = utils.maxrects_single_layer(
+                    layer_pool.superitems_pool,
+                    ws,
+                    ds,
+                    W,
+                    D,
+                    superitems_in_layer=superitems_in_layer,
                 )
             else:
                 print(
@@ -373,12 +365,12 @@ def column_generation(
                 sp_p_sol, sp_p_time = pricing_problem_placement_v2(
                     superitems_in_layer, ws, ds, W, D, tlim=tlim
                 )
+                print("SP placement time:", sp_p_time)
                 placed = "objective" in sp_p_sol
 
                 if placed:
                     layer = build_layer_from_cp(
-                        layer_pool.superitems_pool,
-                        superitems_in_layer,
+                        layer_pool.superitems_pool, superitems_in_layer, sp_p_sol
                     )
                 else:
                     print("Unable to place select items, retrying")
@@ -387,48 +379,16 @@ def column_generation(
                 layer_pool.add(layer)
                 zsl = layer_pool.get_zsl()
                 ol = layer_pool.get_ol()
+            else:
+                print("FEASIBILITY: ", feasibility)
 
     return layer_pool, best_rmp_obj
 
 
-def maxrect_placement(superitems_pool, superitems_in_layer, ws, ds, W, D):
-    # Create the maxrects packing algorithm
-    packer = newPacker(
-        mode=PackingMode.Offline,
-        bin_algo=PackingBin.Global,
-        pack_algo=MaxRectsBaf,
-        sort_algo=SORT_AREA,
-        rotation=False,
-    )
-
-    # Add 1 layers as bin
-    packer.add_bin(W, D, count=1)
-
-    # Add superitems to be packed
-    for i in superitems_in_layer:
-        packer.add_rect(ws[i], ds[i], rid=i)
-
-    # Start the packing procedure
-    packer.pack()
-
-    # Build a layer pool
-    for layer in packer:
-        spool = []
-        scoords = []
-        for superitem in layer:
-            spool += [superitems_pool[superitem.rid]]
-            scoords += [utils.Coordinate(superitem.x, superitem.y)]
-
-        spool = superitems.SuperitemPool(superitems=spool)
-        height = spool.get_max_height()
-        return True, layers.Layer(height, spool, scoords)
-    return False, None
-
-
-def build_layer_from_cp(superitems, superitems_in_layer, sp_p_sol):
+def build_layer_from_cp(superitems_pool, superitems_in_layer, sp_p_sol):
     spool, coords = [], []
     for s in superitems_in_layer:
-        spool += [superitems[s]]
+        spool += [superitems_pool[s]]
         coords += [utils.Coordinate(x=sp_p_sol[f"c_{s}_x"], y=sp_p_sol[f"c_{s}_y"])]
     spool = superitems.SuperitemPool(superitems=spool)
     return layers.Layer(

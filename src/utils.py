@@ -5,6 +5,10 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from rectpack import newPacker, PackingMode, PackingBin, SORT_AREA
+from rectpack.maxrects import MaxRectsBaf
+
+from . import superitems, layers
 
 
 class Dimension:
@@ -311,3 +315,38 @@ def get_l2_lb(order, pallet_dims):
     l2wd = get_l2j2(l1wd, "width", W, "height", H, "depth", D)
     l2hd = get_l2j2(l1hd, "depth", D, "height", H, "width", W)
     return max(l2wh, l2wd, l2hd), l2wh, l2wd, l2hd
+
+
+def maxrects_single_layer(superitems_pool, ws, ds, W, D, superitems_in_layer=None):
+    # Set all superitems in layer
+    if superitems_in_layer is None:
+        superitems_in_layer = np.arange(len(superitems_pool))
+
+    # Create the maxrects packing algorithm
+    packer = newPacker(
+        mode=PackingMode.Offline,
+        bin_algo=PackingBin.Global,
+        pack_algo=MaxRectsBaf,
+        sort_algo=SORT_AREA,
+        rotation=False,
+    )
+
+    # Add one bin representing one layer
+    packer.add_bin(W, D, count=1)
+
+    # Add superitems to be packed
+    for i in superitems_in_layer:
+        packer.add_rect(ws[i], ds[i], rid=i)
+
+    # Start the packing procedure
+    packer.pack()
+
+    # Unfeasible packing
+    if len(packer) == 0:
+        return False, None
+
+    # Feasible packing with a single layer
+    layer = packer[0]
+    spool = superitems.SuperitemPool(superitems=[superitems_pool[s.rid] for s in layer])
+    height = spool.get_max_height()
+    return True, layers.Layer(height, spool, [Coordinate(s.x, s.y) for s in layer])
