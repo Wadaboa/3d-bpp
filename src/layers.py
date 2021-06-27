@@ -310,7 +310,8 @@ class LayerPool:
 
             # Flag the layer if it doesn't respect the minimum density,
             # or update item coverage otherwise
-            if layer.get_density(W=W, D=D, two_dims=two_dims) < min_density:
+            density = layer.get_density(W=W, D=D, two_dims=two_dims)
+            if density < min_density or density == 0:
                 to_remove += [l]
             else:
                 item_ids = layer.get_unique_items_ids()
@@ -349,7 +350,9 @@ class LayerPool:
         new_pool = self.discard_by_densities(W, D, min_density=min_density, two_dims=two_dims)
         new_pool = new_pool.discard_by_coverage(max_coverage=max_coverage)
         if remove_duplicated:
-            new_pool = new_pool.remove_duplicated_items(W, D)
+            new_pool = new_pool.remove_duplicated_items(
+                W, D, min_density=min_density, two_dims=two_dims
+            )
         new_pool = new_pool.remove_empty_layers()
         new_pool.sort_by_densities(W, D, two_dims=two_dims)
         return new_pool

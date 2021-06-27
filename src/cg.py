@@ -19,9 +19,11 @@ STATUS_STRING = {
 def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
     # Solver
     if relaxation:
-        slv = pywraplp.Solver.CreateSolver("CLP")
+        slv = pywraplp.Solver.CreateSolver("GLOP")
     else:
         slv = pywraplp.Solver.CreateSolver("CBC")
+
+    slv.SetNumThreads(8)
 
     # Utility
     infinity = slv.infinity()
@@ -56,6 +58,14 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
             )
 
     # Objective
+    """
+    obj = sum(
+        ws[s] * ds[s] * hs[s] * zsl[s, l] * al[l]
+        for s in range(n_superitems)
+        for l in range(n_layers)
+    )
+    slv.Minimize(obj)
+    """
     obj = sum(h * al[l] for l, h in enumerate(ol))
     if relaxation:
         slv.Minimize(obj)
@@ -142,7 +152,7 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
     return sol, slv.WallTime() / 1000
 
 
-def pricing_problem_placement_v2(superitems_in_layer, ws, ds, W, D, tlim=None):
+def pricing_problem_placement(superitems_in_layer, ws, ds, W, D, tlim=None):
     # Solver
     slv = pywraplp.Solver.CreateSolver("CBC")
 
@@ -201,89 +211,6 @@ def pricing_problem_placement_v2(superitems_in_layer, ws, ds, W, D, tlim=None):
     return sol, slv.WallTime() / 1000
 
 
-def pricing_problem_placement(
-    layer_height,
-    superitems_in_layer,
-    items_in_layer,
-    fsi,
-    ws,
-    ds,
-    hs,
-    W,
-    D,
-    duals,
-    tlim=None,
-):
-    # Solver
-    slv = pywraplp.Solver.CreateSolver("CBC")
-
-    # Variables
-    zsl = {s: slv.IntVar(0, 1, f"z_{s}_l") for s in superitems_in_layer}
-    cix = {s: slv.IntVar(0, int(W - ws[s]), f"c_{s}_x") for s in superitems_in_layer}
-    ciy = {s: slv.IntVar(0, int(D - ds[s]), f"c_{s}_y") for s in superitems_in_layer}
-    xsj, ysj = dict(), dict()
-    for s in superitems_in_layer:
-        for j in superitems_in_layer:
-            if j != s:
-                xsj[(s, j)] = slv.IntVar(0, 1, f"x_{s}_{j}")
-                ysj[(s, j)] = slv.IntVar(0, 1, f"y_{s}_{j}")
-
-    # Constraints
-    # Redundant valid cuts that force the area of
-    # a layer to fit within the area of a bin
-    slv.Add(sum(ws[s] * ds[s] * zsl[s] for s in superitems_in_layer) <= W * D)
-
-    # Define the height of layer l
-    for s in superitems_in_layer:
-        slv.Add(layer_height >= hs[s] * zsl[s])
-
-    # Enforce at least one relative positioning relationship
-    # between each pair of items in a layer
-    for s in superitems_in_layer:
-        for j in superitems_in_layer:
-            if j > s:
-                slv.Add(xsj[s, j] + xsj[j, s] + ysj[s, j] + ysj[j, s] >= zsl[s] + zsl[j] - 1)
-
-    # Ensure that there is at most one spatial relationship
-    # between items i and j along the width and depth dimensions
-    for s in superitems_in_layer:
-        for j in superitems_in_layer:
-            if j > s:
-                slv.Add(xsj[s, j] + xsj[j, s] <= 1)
-                slv.Add(ysj[s, j] + ysj[j, s] <= 1)
-
-    # Non-overlapping constraints
-    for s in superitems_in_layer:
-        for j in superitems_in_layer:
-            if j != s:
-                slv.Add(cix[s] + ws[s] <= cix[j] + W * (1 - xsj[s, j]))
-                slv.Add(ciy[s] + ds[s] <= ciy[j] + D * (1 - ysj[s, j]))
-
-    # Objective
-    obj = layer_height - sum(
-        duals[i] * fsi[s, i] * zsl[s] for i in items_in_layer for s in superitems_in_layer
-    )
-    slv.Minimize(obj)
-
-    # Set a time limit
-    if tlim is not None:
-        slv.SetTimeLimit(1000 * tlim)
-
-    # Solve
-    status = slv.Solve()
-
-    # Extract results
-    sol = dict()
-    if status in (slv.OPTIMAL, slv.FEASIBLE):
-        for s in superitems_in_layer:
-            sol[f"z_{s}_l"] = zsl[s].solution_value()
-            sol[f"c_{s}_x"] = cix[s].solution_value()
-            sol[f"c_{s}_y"] = ciy[s].solution_value()
-        sol["objective"] = slv.Objective().Value()
-
-    return sol, slv.WallTime() / 1000
-
-
 def column_generation(
     layer_pool,
     pallet_dims,
@@ -309,6 +236,7 @@ def column_generation(
         if rmp_sol is None:
             print("Unfeasible main problem")
             break
+        print("RMP objective:", rmp_sol["objective"])
         print("Duals:", duals)
         print("RMP time:", rmp_time)
 
@@ -360,7 +288,7 @@ def column_generation(
                     n_superitems,
                 )
                 print("Solving SP (with placement)...")
-                sp_p_sol, sp_p_time = pricing_problem_placement_v2(
+                sp_p_sol, sp_p_time = pricing_problem_placement(
                     superitems_in_layer, ws, ds, W, D, tlim=tlim
                 )
                 print("SP placement time:", sp_p_time)

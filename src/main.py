@@ -2,7 +2,7 @@ from tqdm.utils import disp_len
 from . import layers, superitems, config, cg, warm_start
 
 
-def main(order, use_cg=True):
+def main(order, use_cg=True, tlim=None):
     final_layer_pool = layers.LayerPool(superitems.SuperitemPool())
     bins_lbs = []
 
@@ -25,7 +25,7 @@ def main(order, use_cg=True):
                     config.PALLET_DIMS,
                     max_iter=100,
                     max_stag_iters=5,
-                    tlim=None,
+                    tlim=tlim,
                     use_maxrect=True,
                 )
                 bins_lbs.append(bins_lb)
