@@ -318,7 +318,9 @@ def get_l2_lb(order, pallet_dims):
     return max(l2wh, l2wd, l2hd), l2wh, l2wd, l2hd
 
 
-def maxrects_single_layer(superitems_pool, ws, ds, W, D, superitems_in_layer=None):
+def maxrects_single_layer(superitems_pool, W, D, superitems_in_layer=None):
+    ws, ds, _ = superitems_pool.get_superitems_dims()
+
     # Set all superitems in layer
     if superitems_in_layer is None:
         superitems_in_layer = np.arange(len(superitems_pool))

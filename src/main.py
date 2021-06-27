@@ -1,3 +1,4 @@
+from tqdm.utils import disp_len
 from . import layers, superitems, config, cg, warm_start
 
 
@@ -6,7 +7,7 @@ def main(order, use_cg=True):
     bins_lbs = []
 
     working_order = order.copy()
-    for i in range(3):
+    for it in range(1):
         superitems_pool = superitems.SuperitemPool(
             order=working_order, pallet_dims=config.PALLET_DIMS, max_vstacked=4, not_horizontal=True
         )

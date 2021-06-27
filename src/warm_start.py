@@ -37,31 +37,6 @@ def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.
     return groups
 
 
-######################## TODO check never stopping recursion
-def filter_height_groups(height_groups):
-    def funzione(group, fringe, selected, subgroups=[]):
-        if set(fringe) == set(range(len(group.superitems))):
-            subgroups += [superitems.SuperitemPool(superitems=selected)]
-            return subgroups
-
-        for i, s in enumerate(group):
-            if len(set(selected[-1].id).intersection(s.id)) > 0:
-                fringe += [i]
-
-        for i, s in enumerate(group):
-            if i not in fringe:
-                subgroups += funzione(group, fringe + [i], selected + [s], subgroups)
-
-        return subgroups
-
-    new_groups = []
-    for group in height_groups:
-        for i, s in enumerate(group):
-            new_groups += funzione(group, [i], [s])
-
-    return new_groups
-
-
 def maxrects(superitems_pool, pallet_dims, add_single=True):
     """
     Given a superitems pool and the maximum dimensions to pack them into,

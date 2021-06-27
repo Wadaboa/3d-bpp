@@ -362,7 +362,7 @@ class SuperitemPool:
             if superitems is not None
             else []
         )
-        self.superitems = {hash(s): s for s in self.superitems}
+        self.hash_to_index = self._get_hash_to_index()
 
     def _gen_superitems(self, order, pallet_dims, max_vstacked, only_single, not_horizontal):
         """
@@ -439,7 +439,7 @@ class SuperitemPool:
 
     def _gen_superitems_vertical(self, superitems, max_vstacked, tol=0.7):
         """
-        Divide superitems by 'with-depth' ratio and Vertically stack each group
+        Divide superitems by width-depth ratio and vertically stack each group
         """
 
         def _gen_superitems_vertical_subgroup(superitems):
@@ -510,8 +510,9 @@ class SuperitemPool:
             superitem, Superitem
         ), "The given superitem should be an instance of the Superitem class"
         s_hash = hash(superitem)
-        if s_hash not in self.superitems:
-            self.superitems[s_hash] = superitem
+        if s_hash not in self.hash_to_index:
+            self.superitems.append(superitem)
+            self.hash_to_index[s_hash] = len(self.superitems) - 1
 
     def extend(self, superitems):
         """
@@ -531,8 +532,9 @@ class SuperitemPool:
             superitem, Superitem
         ), "The given superitem should be an instance of the Superitem class"
         s_hash = hash(superitem)
-        if s_hash in self.superitems:
-            del self.superitems[s_hash]
+        if s_hash in self.hash_to_index:
+            del self.superitems[self.hash_to_index[s_hash]]
+            self.hash_to_index = self._get_hash_to_index()
 
     def get_fsi(self):
         """
@@ -616,6 +618,12 @@ class SuperitemPool:
         """
         return max(s.height for s in self.superitems)
 
+    def get_index(self, superitem):
+        return self.hash_to_index[hash(superitem)]
+
+    def _get_hash_to_index(self):
+        return {hash(s): i for i, s in enumerate(self.superitems)}
+
     def to_dataframe(self):
         """
         Convert the superitem pool to a DataFrame instance
@@ -629,7 +637,7 @@ class SuperitemPool:
         return len(self.superitems)
 
     def __contains__(self, superitem):
-        return superitem in self.superitems
+        return hash(superitem) in self.hash_to_index
 
     def __getitem__(self, i):
         return self.superitems[i]

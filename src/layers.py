@@ -31,8 +31,12 @@ class Layer:
         return items_coords
 
     def get_items_dims(self):
+        """
+        Return a dictionary having as key the item id and as value
+        the item dimensions in the layer
+        """
         items_dims = dict()
-        for s, c in zip(self.superitems_pool, self.superitems_coords):
+        for s in self.superitems_pool:
             dims = s.get_items_dims()
             if utils.duplicate_keys([items_dims, dims]):
                 print("Duplicated item in the same layer")
@@ -55,15 +59,9 @@ class Layer:
         """
         Remove the given superitem from the layer
         """
+        index = self.superitems_pool.get_index(superitem)
         self.superitems_pool.remove(superitem)
-        del#
-
-    def pop(self, i):
-        """
-        Remove the superitem at the given index from the layer
-        """
-        self.superitems_pool.pop(i)
-        self.superitems_coords.pop(i)
+        self.superitems_coords.pop(index)
 
     def get_superitems_containing_item(self, item_id):
         """
@@ -105,12 +103,9 @@ class Layer:
         """
         Apply maxrects over superitems in layer
         """
-        items_dims = self.get_items_dims()
-        ws = [items_dims[k].width for k in items_dims]
-        ds = [items_dims[k].depth for k in items_dims]
-        placed, layer = utils.maxrects_single_layer(self.superitems_pool, ws, ds, W, D)
+        placed, layer = utils.maxrects_single_layer(self.superitems_pool, W, D)
         assert placed, "Couldn't rearrange superitems"
-        self.superitems_coords = layer.superitems_coords
+        return layer
 
     def __str__(self):
         return f"Layer(height={self.height}, ids={self.superitems_pool.get_unique_item_ids()})"
@@ -192,8 +187,8 @@ class LayerPool:
         Add the given Layer to the current pool
         """
         assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
-        if layer not in self.layers:
-            self.layers.append(layer)
+        # if layer not in self.layers:
+        self.layers.append(layer)
 
     def extend(self, layer_pool):
         """
@@ -325,7 +320,7 @@ class LayerPool:
         # Rearrange layers in which at least one superitem was removed
         for l in edited_layers:
             if l not in to_remove:
-                selected_layers[l].rearrange(W, D)
+                selected_layers[l] = selected_layers[l].rearrange(W, D)
 
         # Remove edited layers that do not respect the minimum
         # density requirement after removing at least one superitem

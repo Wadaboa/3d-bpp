@@ -175,10 +175,7 @@ class BinPool:
             spool = superitems.SuperitemPool(superitems=to_place)
             placed = False
             while not placed:
-                ws, ds, _ = spool.get_superitems_dims()
-                placed, layer = utils.maxrects_single_layer(
-                    spool, ws, ds, pallet_width, pallet_depth
-                )
+                placed, layer = utils.maxrects_single_layer(spool, pallet_width, pallet_depth)
                 if not placed:
                     min_superitem, _ = spool.get_extreme_superitem(minimum=True, two_dims=False)
                     spool.remove(min_superitem)

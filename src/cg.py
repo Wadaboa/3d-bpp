@@ -348,8 +348,6 @@ def column_generation(
             if use_maxrect:
                 placed, layer = utils.maxrects_single_layer(
                     layer_pool.superitems_pool,
-                    ws,
-                    ds,
                     W,
                     D,
                     superitems_in_layer=superitems_in_layer,
