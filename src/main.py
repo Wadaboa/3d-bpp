@@ -30,6 +30,10 @@ def main(order, use_cg=True):
                 bins_lbs.append(bins_lb)
             final_layer_pool.extend(layer_pool)
 
+        # Add single item superitems that were discarded by
+        # the initial height groups procedure
+        final_layer_pool.extend_superitems_pool(superitems_pool)
+
         final_layer_pool = final_layer_pool.select_layers(
             config.PALLET_WIDTH, config.PALLET_DEPTH, min_density=0.5, max_coverage=3
         )

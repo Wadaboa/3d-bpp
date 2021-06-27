@@ -55,10 +55,8 @@ class Layer:
         """
         Remove the given superitem from the layer
         """
-        for i, s in enumerate(self.superitems_pool):
-            if s == superitem:
-                self.pop(i)
-                break
+        self.superitems_pool.remove(superitem)
+        del#
 
     def pop(self, i):
         """
@@ -213,6 +211,12 @@ class LayerPool:
         Remove the layer at the given index from the pool
         """
         self.layers.pop(i)
+
+    def add_to_superitems_pool(self, superitem):
+        self.superitems_pool.add(superitem)
+
+    def extend_superitems_pool(self, superitems_pool):
+        self.superitems_pool.extend(superitems_pool)
 
     def get_unique_items_ids(self):
         """

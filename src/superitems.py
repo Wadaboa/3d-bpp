@@ -51,6 +51,10 @@ class Item:
     def volume(self):
         return self.dimensions.volume
 
+    @property
+    def area(self):
+        return self.dimensions.area
+
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             return self.id == other.id and self.dimensions == other.dimensions
@@ -105,6 +109,10 @@ class Superitem:
     @property
     def volume(self):
         return sum(i.volume for i in self.items)
+
+    @property
+    def area(self):
+        return sum(i.area for i in self.items)
 
     @property
     def id(self):
@@ -306,6 +314,10 @@ class VerticalSuperitem(Superitem):
         return sum(i.height for i in self.items)
 
     @property
+    def area(self):
+        return self.width * self.depth
+
+    @property
     def enclosing_volume(self):
         return self.width * self.depth * self.height
 
@@ -350,6 +362,7 @@ class SuperitemPool:
             if superitems is not None
             else []
         )
+        self.superitems = {hash(s): s for s in self.superitems}
 
     def _gen_superitems(self, order, pallet_dims, max_vstacked, only_single, not_horizontal):
         """
@@ -496,8 +509,9 @@ class SuperitemPool:
         assert isinstance(
             superitem, Superitem
         ), "The given superitem should be an instance of the Superitem class"
-        if superitem not in self.superitems:
-            self.superitems.append(superitem)
+        s_hash = hash(superitem)
+        if s_hash not in self.superitems:
+            self.superitems[s_hash] = superitem
 
     def extend(self, superitems):
         """
@@ -509,11 +523,16 @@ class SuperitemPool:
         for superitem in superitems:
             self.add(superitem)
 
-    def pop(self, i):
+    def remove(self, superitem):
         """
-        Remove the superitem at the given index from the pool
+        Remove the given superitem from the pool
         """
-        self.superitems.pop(i)
+        assert isinstance(
+            superitem, Superitem
+        ), "The given superitem should be an instance of the Superitem class"
+        s_hash = hash(superitem)
+        if s_hash in self.superitems:
+            del self.superitems[s_hash]
 
     def get_fsi(self):
         """
@@ -535,7 +554,6 @@ class SuperitemPool:
     def get_superitems_dims(self):
         """
         Return the dimensions of superitems in the pool
-        as 3 numpy arrays
         """
         ws = [s.width for s in self.superitems]
         ds = [s.depth for s in self.superitems]
@@ -551,6 +569,22 @@ class SuperitemPool:
             if item_id in superitem.id:
                 superitems += [superitem]
         return superitems
+
+    def get_single_superitems(self):
+        singles = []
+        for superitem in self.superitems:
+            if isinstance(superitem, SingleItemSuperitem):
+                singles += [superitem]
+        return singles
+
+    def get_extreme_superitem(self, minimum=False, two_dims=False):
+        func = np.argmax if not minimum else np.argmin
+        index = (
+            func([s.area for s in self.superitems])
+            if two_dims
+            else func([s.volume for s in self.superitems])
+        )
+        return self.superitems[index], index
 
     def get_item_ids(self):
         """

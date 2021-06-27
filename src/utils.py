@@ -21,6 +21,7 @@ class Dimension:
         self.depth = int(depth)
         self.height = int(height)
         self.weight = int(weight)
+        self.area = int(width * depth)
         self.volume = int(width * depth * height)
 
     def __eq__(self, other):
