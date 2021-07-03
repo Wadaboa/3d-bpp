@@ -136,7 +136,6 @@ def call_baseline_model(superitems_pool, pallet_dims, tlim=None, num_workers=4):
     for l in range(max_layers):
         if sol[f"o_{l}"] > 0:
             superitems_in_layer = [s for s in range(n_superitems) if sol[f"z_{s}_{l}"] == 1]
-            print(l, superitems_in_layer)
             spool, coords = [], []
             for s in superitems_in_layer:
                 spool += [superitems_pool[s]]

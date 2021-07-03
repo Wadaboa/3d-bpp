@@ -5,39 +5,7 @@ from rectpack.maxrects import MaxRectsBaf
 from . import utils, layers, superitems
 
 
-def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.5):
-    """
-    Divide the whole pool of superitems into groups having either
-    the exact same height or an height within the given tolerance
-    """
-    # Get unique heights
-    unique_heights = sorted(set(s.height for s in superitems_pool))
-    height_sets = {
-        h: {k for k in unique_heights[i:] if k - h <= height_tol}
-        for i, h in enumerate(unique_heights)
-    }
-    for (i, hi), (j, hj) in zip(list(height_sets.items())[:-1], list(height_sets.items())[1:]):
-        if hj.issubset(hi):
-            unique_heights.remove(j)
-
-    # Generate one group of superitems for each similar height
-    groups = []
-    for height in unique_heights:
-        spool = [
-            s for s in superitems_pool if s.height >= height and s.height <= height + height_tol
-        ]
-        spool = superitems.SuperitemPool(superitems=spool)
-        pallet_width, pallet_depth, _ = pallet_dims
-        if (
-            sum(s.volume for s in spool)
-            >= density_tol * spool.get_max_height() * pallet_width * pallet_depth
-        ):
-            groups += [spool]
-
-    return groups
-
-
-def maxrects(superitems_pool, pallet_dims, add_single=True):
+def maxrects_multiple_layers(superitems_pool, pallet_dims, add_single=True):
     """
     Given a superitems pool and the maximum dimensions to pack them into,
     return a layer pool with warm start placements
@@ -84,3 +52,44 @@ def maxrects(superitems_pool, pallet_dims, add_single=True):
         layer_pool.add(layers.Layer(height, spool, scoords))
 
     return layer_pool
+
+
+def maxrects_single_layer(superitems_pool, W, D, superitems_in_layer=None):
+    """
+    Given a superitems pool and the maximum dimensions to pack them into,
+    try to fit each superitem in a single layer (if not possible, return an error)
+    """
+    ws, ds, _ = superitems_pool.get_superitems_dims()
+
+    # Set all superitems in layer
+    if superitems_in_layer is None:
+        superitems_in_layer = np.arange(len(superitems_pool))
+
+    # Create the maxrects packing algorithm
+    packer = newPacker(
+        mode=PackingMode.Offline,
+        bin_algo=PackingBin.Global,
+        pack_algo=MaxRectsBaf,
+        sort_algo=SORT_AREA,
+        rotation=False,
+    )
+
+    # Add one bin representing one layer
+    packer.add_bin(W, D, count=1)
+
+    # Add superitems to be packed
+    for i in superitems_in_layer:
+        packer.add_rect(ws[i], ds[i], rid=i)
+
+    # Start the packing procedure
+    packer.pack()
+
+    # Unfeasible or incomplete packing
+    if len(packer) == 0 or len(packer[0]) < len(superitems_in_layer):
+        return False, None
+
+    # Feasible packing with a single layer
+    spool = superitems.SuperitemPool(superitems=[superitems_pool[s.rid] for s in packer[0]])
+    return True, layers.Layer(
+        spool.get_max_height(), spool, [utils.Coordinate(s.x, s.y) for s in packer[0]]
+    )

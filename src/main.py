@@ -1,4 +1,4 @@
-from . import layers, superitems, config, warm_start, column_generation, baseline
+from . import layers, superitems, config, maxrects, column_generation, baseline
 
 
 def baseline_procedure(order, tlim=None):
@@ -40,14 +40,14 @@ def column_generation_procedure(order, use_cg=True, tlim=None):
             not_horizontal=True,
         )
 
-        height_groups = warm_start.get_height_groups(
+        height_groups = get_height_groups(
             superitems_pool, config.PALLET_DIMS, height_tol=50, density_tol=0.5
         )
 
         for i, spool in enumerate([height_groups[0]]):
             print(f"Height group {i + 1}/{len(height_groups)}")
             """
-            layer_pool = warm_start.maxrects(
+            layer_pool = maxrects.maxrects_multiple_layers(
                 spool, config.PALLET_DIMS, add_single=False
             )
             """
@@ -80,6 +80,38 @@ def column_generation_procedure(order, use_cg=True, tlim=None):
         working_order = order.iloc[not_covered].copy()
 
     return final_layer_pool, bins_lbs
+
+
+def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.5):
+    """
+    Divide the whole pool of superitems into groups having either
+    the exact same height or an height within the given tolerance
+    """
+    # Get unique heights
+    unique_heights = sorted(set(s.height for s in superitems_pool))
+    height_sets = {
+        h: {k for k in unique_heights[i:] if k - h <= height_tol}
+        for i, h in enumerate(unique_heights)
+    }
+    for (i, hi), (j, hj) in zip(list(height_sets.items())[:-1], list(height_sets.items())[1:]):
+        if hj.issubset(hi):
+            unique_heights.remove(j)
+
+    # Generate one group of superitems for each similar height
+    groups = []
+    for height in unique_heights:
+        spool = [
+            s for s in superitems_pool if s.height >= height and s.height <= height + height_tol
+        ]
+        spool = superitems.SuperitemPool(superitems=spool)
+        pallet_width, pallet_depth, _ = pallet_dims
+        if (
+            sum(s.volume for s in spool)
+            >= density_tol * spool.get_max_height() * pallet_width * pallet_depth
+        ):
+            groups += [spool]
+
+    return groups
 
 
 if __name__ == "__main__":

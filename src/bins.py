@@ -4,7 +4,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from . import utils, superitems, layers, warm_start
+from . import utils, superitems, maxrects
 
 
 class Bin:
@@ -158,9 +158,7 @@ class BinPool:
             to_place = []
             for s in superitems_list:
                 last_layer_area = working_bin.layer_pool[-1].area
-                max_area = np.clip(
-                    area_tol * last_layer_area, 0, pallet_width * pallet_depth
-                )
+                max_area = np.clip(area_tol * last_layer_area, 0, pallet_width * pallet_depth)
                 area = sum(s.area for s in to_place)
                 if area < max_area and s.height < working_bin.remaining_height:
                     to_place += [s]
@@ -177,13 +175,9 @@ class BinPool:
             spool = superitems.SuperitemPool(superitems=to_place)
             placed = False
             while not placed:
-                placed, layer = utils.maxrects_single_layer(
-                    spool, pallet_width, pallet_depth
-                )
+                placed, layer = utils.maxrects_single_layer(spool, pallet_width, pallet_depth)
                 if not placed:
-                    min_superitem, _ = spool.get_extreme_superitem(
-                        minimum=True, two_dims=False
-                    )
+                    min_superitem, _ = spool.get_extreme_superitem(minimum=True, two_dims=False)
                     spool.remove(min_superitem)
             return layer
 
@@ -210,8 +204,7 @@ class BinPool:
         # Sort superitems by ascending height
         superitems_list = self.layer_pool.not_covered_single_superitems()
         superitems_list = [
-            superitems_list[i]
-            for i in utils.argsort([s.height for s in superitems_list])
+            superitems_list[i] for i in utils.argsort([s.height for s in superitems_list])
         ]
 
         # Get placeable and unplaceable items
@@ -225,7 +218,7 @@ class BinPool:
         remaining_items += superitems_list
         if len(remaining_items) > 0:
             spool = superitems.SuperitemPool(superitems=remaining_items)
-            lpool = warm_start.maxrects(spool, self.pallet_dims, add_single=False)
+            lpool = maxrects.maxrects_multiple_layers(spool, self.pallet_dims, add_single=False)
             self.layer_pool.extend(lpool)
             self.bins += self._build(lpool)
 
@@ -264,7 +257,5 @@ class BinPool:
         return self.bins[i]
 
     def __setitem__(self, i, e):
-        assert isinstance(
-            e, Bin
-        ), "The given bin should be an instance of the Bin class"
+        assert isinstance(e, Bin), "The given bin should be an instance of the Bin class"
         self.bins[i] = e
