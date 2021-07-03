@@ -53,16 +53,9 @@ class ProductDataset:
         Generate a sample of products
         """
         # Define ratios and volumes as specified in the paper
-        wh_ratios = np.random.normal(
-            loc=0.695, scale=0.118, size=(self.num_products, 1)
-        )
-        dh_ratios = np.random.lognormal(
-            mean=-0.654, sigma=0.453, size=(self.num_products, 1)
-        )
-        volumes = (
-            np.random.lognormal(mean=2.568, sigma=0.705, size=(self.num_products, 1))
-            * 1e6
-        )
+        wh_ratios = np.random.normal(loc=0.695, scale=0.118, size=(self.num_products, 1))
+        dh_ratios = np.random.lognormal(mean=-0.654, sigma=0.453, size=(self.num_products, 1))
+        volumes = np.random.lognormal(mean=2.568, sigma=0.705, size=(self.num_products, 1)) * 1e6
 
         # Generate each dimension separately
         heights = np.clip(
@@ -117,3 +110,12 @@ class ProductDataset:
         order = self.products.sample(ordered_products, replace=True)
         ids = pd.Series(order.index, name="id")
         return pd.concat([ids, order.reset_index(drop=True)], axis=1)
+
+    def get_dummy_order(self, ordered_products):
+        """
+        Return a dummy order with products having the same height
+        """
+        order = self.products.sample(ordered_products, replace=True)
+        order["height"] = order.sample(1).height.item()
+        order["volume"] = order.width * order.depth * order.height
+        return order
