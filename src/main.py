@@ -1,8 +1,33 @@
-from tqdm.utils import disp_len
-from . import layers, superitems, config, cg, warm_start
+from . import layers, superitems, config, warm_start, column_generation, baseline
 
 
-def main(order, use_cg=True, tlim=None):
+def baseline_procedure(order, tlim=None):
+    final_layer_pool = layers.LayerPool(superitems.SuperitemPool())
+    working_order = order.copy()
+    for it in range(1):
+        superitems_pool = superitems.SuperitemPool(
+            order=working_order,
+            pallet_dims=config.PALLET_DIMS,
+            max_vstacked=4,
+            not_horizontal=True,
+        )
+
+        layer_pool = baseline.call_baseline_model(superitems_pool, config.PALLET_DIMS, tlim=tlim)
+        final_layer_pool.extend(layer_pool)
+
+        final_layer_pool = final_layer_pool.select_layers(
+            config.PALLET_WIDTH, config.PALLET_DEPTH, min_density=0.5, max_coverage=3
+        )
+
+        item_coverage = final_layer_pool.item_coverage()
+        not_covered = [k for k, v in item_coverage.items() if not v]
+        print(f"Items not covered: {len(not_covered)}/{len(item_coverage)}")
+        working_order = order.iloc[not_covered].copy()
+
+    return final_layer_pool
+
+
+def column_generation_procedure(order, use_cg=True, tlim=None):
     final_layer_pool = layers.LayerPool(superitems.SuperitemPool())
     bins_lbs = []
 
@@ -29,7 +54,7 @@ def main(order, use_cg=True, tlim=None):
             layer_pool = layers.LayerPool(spool, add_single=True)
             display(layer_pool.to_dataframe())
             if use_cg:
-                layer_pool, bins_lb = cg.column_generation(
+                layer_pool, bins_lb = column_generation.column_generation(
                     layer_pool,
                     config.PALLET_DIMS,
                     max_iter=100,
@@ -55,3 +80,7 @@ def main(order, use_cg=True, tlim=None):
         working_order = order.iloc[not_covered].copy()
 
     return final_layer_pool, bins_lbs
+
+
+if __name__ == "__main__":
+    pass

@@ -39,11 +39,7 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
     # Constraints
     for i in range(n_items):
         slv.Add(
-            sum(
-                fsi[s, i] * zsl[s, l] * al[l]
-                for s in range(n_superitems)
-                for l in range(n_layers)
-            )
+            sum(fsi[s, i] * zsl[s, l] * al[l] for s in range(n_superitems) for l in range(n_layers))
             >= 1
         )
 
@@ -78,9 +74,7 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
     return sol, slv.WallTime() / 1000, duals
 
 
-def pricing_problem_no_placement(
-    fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None
-):
+def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None):
     # Solver
     slv = pywraplp.Solver.CreateSolver("CBC")
 
@@ -106,13 +100,9 @@ def pricing_problem_no_placement(
         slv.Add(sum(zsl[s] for s in range(n_superitems)) <= feasibility - 1)
 
     # Compute reward for greater number of selected superitems
-    upper_bound_reward = (
-        min(duals[i] for i in range(n_items) if duals[i] > 0) + n_superitems
-    )
+    upper_bound_reward = min(duals[i] for i in range(n_items) if duals[i] > 0) + n_superitems
     reward = (
-        sum(
-            zsl[s] for i in range(n_items) for s in range(n_superitems) if duals[i] == 0
-        )
+        sum(zsl[s] for i in range(n_items) for s in range(n_superitems) if duals[i] == 0)
         / upper_bound_reward
     )
     print(
@@ -122,11 +112,7 @@ def pricing_problem_no_placement(
     # Objective
     obj = (
         ol
-        - sum(
-            duals[i] * fsi[s, i] * zsl[s]
-            for i in range(n_items)
-            for s in range(n_superitems)
-        )
+        - sum(duals[i] * fsi[s, i] * zsl[s] for i in range(n_items) for s in range(n_superitems))
         - reward
     )
     slv.Minimize(obj)
@@ -149,9 +135,7 @@ def pricing_problem_no_placement(
     return sol, slv.WallTime() / 1000
 
 
-def pricing_problem_no_placement_test(
-    fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None
-):
+def pricing_problem_no_placement_test(fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None):
     # Model and Solver
     mdl = cp_model.CpModel()
     slv = cp_model.CpSolver()
@@ -184,10 +168,7 @@ def pricing_problem_no_placement_test(
     )
     mdl.Minimize(obj)
     duals_sort_index = utils.argsort(
-        [
-            sum([fsi[s, i] * duals[i] for i in range(n_items)])
-            for s in range(n_superitems)
-        ]
+        [sum([fsi[s, i] * duals[i] for i in range(n_items)]) for s in range(n_superitems)]
     )
     mdl.AddDecisionStrategy([ol], cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
     mdl.AddDecisionStrategy(
@@ -300,9 +281,7 @@ def column_generation(
 
         # Reduced master problem
         print("Solving RMP...")
-        rmp_sol, rmp_time, duals = main_problem(
-            fsi, zsl, ol, tlim=tlim, relaxation=True
-        )
+        rmp_sol, rmp_time, duals = main_problem(fsi, zsl, ol, tlim=tlim, relaxation=True)
         if rmp_sol is None:
             print("Unfeasible main problem")
             break
@@ -336,9 +315,7 @@ def column_generation(
                 fsi, ws, ds, hs, W, D, duals, feasibility=feasibility, tlim=tlim
             )
             print("SP no placement time:", sp_np_time)
-            superitems_in_layer = [
-                s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1
-            ]
+            superitems_in_layer = [s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1]
             feasibility = len(superitems_in_layer)
 
             # Non-negative reduced cost
