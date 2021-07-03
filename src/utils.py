@@ -249,7 +249,10 @@ def get_l1_lb(order, pallet_dims):
             js = get_js(j2, p, d3, db3)
             jl = get_jl(j2, p, d3, db3)
             a = np.ceil((js[d2].sum() - (len(jl) * db3 - jl[d2].sum())) / db3)
-            b = np.ceil((len(js) - (np.floor((db3 - jl[d2].values) / p)).sum()) / np.floor(db3 / p))
+            b = np.ceil(
+                (len(js) - (np.floor((db3 - jl[d2].values) / p)).sum())
+                / np.floor(db3 / p)
+            )
             if max(a, b) > max_ab:
                 max_ab = max(a, b)
 
@@ -292,7 +295,10 @@ def get_l2_lb(order, pallet_dims):
         return l1 + max(
             0,
             np.ceil(
-                (pd.concat([kl, ks], axis=0).volume.sum() - (db3 * l1 - kv[d3].sum()) * db1 * db2)
+                (
+                    pd.concat([kl, ks], axis=0).volume.sum()
+                    - (db3 * l1 - kv[d3].sum()) * db1 * db2
+                )
                 / (db1 * db2 * db3)
             ),
         )
@@ -300,7 +306,9 @@ def get_l2_lb(order, pallet_dims):
     def get_l2j2(l1, d1, db1, d2, db2, d3, db3):
         max_l2j2 = -np.inf
         pq_combs = list(
-            itertools.product(list(range(1, db1 // 2 + 1)), list(range(1, db2 // 2 + 1)))
+            itertools.product(
+                list(range(1, db1 // 2 + 1)), list(range(1, db2 // 2 + 1))
+            )
         )
         for p, q in tqdm(pq_combs):
             l2j2 = get_l2j2pq(p, q, l1, d1, db1, d2, db2, d3, db3)
@@ -344,8 +352,8 @@ def maxrects_single_layer(superitems_pool, W, D, superitems_in_layer=None):
     # Start the packing procedure
     packer.pack()
 
-    # Unfeasible packing
-    if len(packer) == 0:
+    # Unfeasible or incomplete packing
+    if len(packer) == 0 or len(packer[0]) < len(superitems_in_layer):
         return False, None
 
     # Feasible packing with a single layer

@@ -38,24 +38,14 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
 
     # Constraints
     for i in range(n_items):
-        if relaxation:
-            slv.Add(
-                -sum(
-                    fsi[s, i] * zsl[s, l] * al[l]
-                    for s in range(n_superitems)
-                    for l in range(n_layers)
-                )
-                <= -1
+        slv.Add(
+            sum(
+                fsi[s, i] * zsl[s, l] * al[l]
+                for s in range(n_superitems)
+                for l in range(n_layers)
             )
-        else:
-            slv.Add(
-                sum(
-                    fsi[s, i] * zsl[s, l] * al[l]
-                    for s in range(n_superitems)
-                    for l in range(n_layers)
-                )
-                >= 1
-            )
+            >= 1
+        )
 
     # Objective
     """
@@ -67,10 +57,7 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
     slv.Minimize(obj)
     """
     obj = sum(h * al[l] for l, h in enumerate(ol))
-    if relaxation:
-        slv.Minimize(obj)
-    else:
-        slv.Maximize(-obj)
+    slv.Minimize(obj)
 
     # Set a time limit
     if tlim is not None:
@@ -85,13 +72,15 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
         sol = {f"alpha_{l}": al[l].solution_value() for l in range(n_layers)}
         sol["objective"] = slv.Objective().Value()
         if relaxation:
-            duals = np.array([-c.dual_value() for c in slv.constraints()])
+            duals = np.array([c.dual_value() for c in slv.constraints()])
 
     # Return results
     return sol, slv.WallTime() / 1000, duals
 
 
-def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None):
+def pricing_problem_no_placement(
+    fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None
+):
     # Solver
     slv = pywraplp.Solver.CreateSolver("CBC")
 
@@ -100,7 +89,7 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
     n_superitems, n_items = fsi.shape
 
     # Variables
-    ol = slv.NumVar(0, infinity, f"o_l")
+    ol = slv.IntVar(0, max(hs), f"o_l")
     zsl = [slv.IntVar(0, 1, f"z_{s}_l") for s in range(n_superitems)]
 
     # Constraints
@@ -117,9 +106,13 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
         slv.Add(sum(zsl[s] for s in range(n_superitems)) <= feasibility - 1)
 
     # Compute reward for greater number of selected superitems
-    upper_bound_reward = min(duals[i] for i in range(n_items) if duals[i] > 0) + n_superitems
+    upper_bound_reward = (
+        min(duals[i] for i in range(n_items) if duals[i] > 0) + n_superitems
+    )
     reward = (
-        sum(zsl[s] for i in range(n_items) for s in range(n_superitems) if duals[i] == 0)
+        sum(
+            zsl[s] for i in range(n_items) for s in range(n_superitems) if duals[i] == 0
+        )
         / upper_bound_reward
     )
     print(
@@ -129,7 +122,11 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
     # Objective
     obj = (
         ol
-        - sum(duals[i] * fsi[s, i] * zsl[s] for i in range(n_items) for s in range(n_superitems))
+        - sum(
+            duals[i] * fsi[s, i] * zsl[s]
+            for i in range(n_items)
+            for s in range(n_superitems)
+        )
         - reward
     )
     slv.Minimize(obj)
@@ -148,6 +145,72 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
         for s in range(n_superitems):
             sol[f"z_{s}_l"] = zsl[s].solution_value()
         sol["objective"] = slv.Objective().Value()
+
+    return sol, slv.WallTime() / 1000
+
+
+def pricing_problem_no_placement_test(
+    fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None
+):
+    # Model and Solver
+    mdl = cp_model.CpModel()
+    slv = cp_model.CpSolver()
+
+    # Utility
+    n_superitems, n_items = fsi.shape
+
+    # Variables
+    ol = mdl.NewIntVar(0, max(hs), f"o_l")
+    zsl = [mdl.NewBoolVar(f"z_{s}_l") for s in range(n_superitems)]
+
+    # Constraints
+    # Redundant valid cuts that force the area of
+    # a layer to fit within the area of a bin
+    mdl.Add(sum(ws[s] * ds[s] * zsl[s] for s in range(n_superitems)) <= W * D)
+    for s in range(n_superitems):
+        # Define the height of layer l
+        mdl.Add(ol >= hs[s] * zsl[s])
+
+    # Enforce feasible placement
+    if feasibility is not None:
+        print("Adding feasibility constraint: num selected <=", feasibility - 1)
+        mdl.Add(sum(zsl[s] for s in range(n_superitems)) <= feasibility - 1)
+
+    # Objective
+    obj = ol - sum(
+        int(np.ceil(duals[i])) * fsi[s, i] * zsl[s]
+        for i in range(n_items)
+        for s in range(n_superitems)
+    )
+    mdl.Minimize(obj)
+    duals_sort_index = utils.argsort(
+        [
+            sum([fsi[s, i] * duals[i] for i in range(n_items)])
+            for s in range(n_superitems)
+        ]
+    )
+    mdl.AddDecisionStrategy([ol], cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
+    mdl.AddDecisionStrategy(
+        [zsl[s] for s in duals_sort_index],
+        cp_model.CHOOSE_FIRST,
+        cp_model.SELECT_MAX_VALUE,
+    )
+
+    # Set a time limit
+    if tlim is not None:
+        slv.SetTimeLimit(1000 * tlim)
+
+    slv.parameters.num_search_workers = 4
+    # Solve
+    status = slv.Solve(mdl)
+
+    # Extract results
+    sol = dict()
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        sol[f"o_l"] = slv.Value(ol)
+        for s in range(n_superitems):
+            sol[f"z_{s}_l"] = slv.Value(zsl[s])
+        sol["objective"] = slv.ObjectiveValue()
 
     return sol, slv.WallTime() / 1000
 
@@ -218,7 +281,10 @@ def column_generation(
     max_stag_iters=20,
     tlim=None,
     use_maxrect=False,
+    return_warm_start=True,
 ):
+    if not return_warm_start:
+        new_layer_pool = layers.LayerPool(layer_pool.superitems_pool)
     W, D, _ = pallet_dims
     fsi, _, _ = layer_pool.superitems_pool.get_fsi()
     zsl = layer_pool.get_zsl()
@@ -227,12 +293,16 @@ def column_generation(
 
     n_superitems, n_items = fsi.shape
     best_rmp_obj, num_stag_iters = float("inf"), 0
+    # TODO try to filter on last alpha values
+    # convergence = False
     for i in range(max_iter):
         print(f"Iteration {i + 1}/{max_iter}")
 
         # Reduced master problem
         print("Solving RMP...")
-        rmp_sol, rmp_time, duals = main_problem(fsi, zsl, ol, tlim=tlim, relaxation=True)
+        rmp_sol, rmp_time, duals = main_problem(
+            fsi, zsl, ol, tlim=tlim, relaxation=True
+        )
         if rmp_sol is None:
             print("Unfeasible main problem")
             break
@@ -249,6 +319,7 @@ def column_generation(
 
         # Break if RMP objective does not improve
         if num_stag_iters == max_stag_iters:
+            print("Stagnation exit :(")
             break
 
         # Check feasibility
@@ -261,11 +332,13 @@ def column_generation(
         feasibility, placed = None, False
         while not placed:
             print("Solving SP (no placement)...")
-            sp_np_sol, sp_np_time = pricing_problem_no_placement(
+            sp_np_sol, sp_np_time = pricing_problem_no_placement_test(
                 fsi, ws, ds, hs, W, D, duals, feasibility=feasibility, tlim=tlim
             )
             print("SP no placement time:", sp_np_time)
-            superitems_in_layer = [s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1]
+            superitems_in_layer = [
+                s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1
+            ]
             feasibility = len(superitems_in_layer)
 
             # Non-negative reduced cost
@@ -303,11 +376,15 @@ def column_generation(
 
             if placed:
                 layer_pool.add(layer)
+                if not return_warm_start:
+                    new_layer_pool.add(layer)
+                display(layer.to_dataframe())
                 zsl = layer_pool.get_zsl()
                 ol = layer_pool.get_ol()
             else:
                 print("FEASIBILITY: ", feasibility)
-
+    if not return_warm_start:
+        return new_layer_pool, best_rmp_obj
     return layer_pool, best_rmp_obj
 
 

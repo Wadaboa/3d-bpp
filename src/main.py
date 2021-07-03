@@ -9,24 +9,34 @@ def main(order, use_cg=True, tlim=None):
     working_order = order.copy()
     for it in range(1):
         superitems_pool = superitems.SuperitemPool(
-            order=working_order, pallet_dims=config.PALLET_DIMS, max_vstacked=4, not_horizontal=True
+            order=working_order,
+            pallet_dims=config.PALLET_DIMS,
+            max_vstacked=4,
+            not_horizontal=True,
         )
 
         height_groups = warm_start.get_height_groups(
             superitems_pool, config.PALLET_DIMS, height_tol=50, density_tol=0.5
         )
 
-        for i, spool in enumerate(height_groups):
+        for i, spool in enumerate([height_groups[0]]):
             print(f"Height group {i + 1}/{len(height_groups)}")
-            layer_pool = warm_start.maxrects(spool, config.PALLET_DIMS, add_single=False)
+            """
+            layer_pool = warm_start.maxrects(
+                spool, config.PALLET_DIMS, add_single=False
+            )
+            """
+            layer_pool = layers.LayerPool(spool, add_single=True)
+            display(layer_pool.to_dataframe())
             if use_cg:
                 layer_pool, bins_lb = cg.column_generation(
                     layer_pool,
                     config.PALLET_DIMS,
                     max_iter=100,
-                    max_stag_iters=5,
+                    max_stag_iters=20,
                     tlim=tlim,
                     use_maxrect=True,
+                    return_warm_start=False,
                 )
                 bins_lbs.append(bins_lb)
             final_layer_pool.extend(layer_pool)
