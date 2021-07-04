@@ -3,7 +3,7 @@ import copy
 import numpy as np
 import pandas as pd
 
-from . import utils, superitems, utils
+from . import utils, superitems, maxrects
 
 
 class Layer:
@@ -103,7 +103,7 @@ class Layer:
         """
         Apply maxrects over superitems in layer
         """
-        placed, layer = utils.maxrects_single_layer(self.superitems_pool, W, D)
+        placed, layer = maxrects.maxrects_single_layer(self.superitems_pool, W, D)
         assert placed, "Couldn't rearrange superitems"
         return layer
 
@@ -219,13 +219,13 @@ class LayerPool:
         """
         return self.superitems_pool.get_unique_item_ids()
 
-    def get_densities(self, W, D, two_dims=True):
+    def get_densities(self, W, D, two_dims=False):
         """
         Compute the 2D/3D density of each layer in the pool
         """
         return [layer.get_density(W=W, D=D, two_dims=two_dims) for layer in self.layers]
 
-    def sort_by_densities(self, W, D, two_dims=True):
+    def sort_by_densities(self, W, D, two_dims=False):
         """
         Sort layers in the pool by decreasing density
         """
@@ -233,7 +233,7 @@ class LayerPool:
         sorted_indices = np.array(densities).argsort()[::-1]
         self.layers = [self.layers[i] for i in sorted_indices]
 
-    def discard_by_densities(self, W, D, min_density=0.5, two_dims=True):
+    def discard_by_densities(self, W, D, min_density=0.5, two_dims=False):
         """
         Sort layers by densities and keep only those with a
         density greater than or equal to the given minimum
@@ -290,7 +290,7 @@ class LayerPool:
 
         return self.subset(layers_to_select)
 
-    def remove_duplicated_items(self, W, D, min_density=0.5, two_dims=True):
+    def remove_duplicated_items(self, W, D, min_density=0.5, two_dims=False):
         """
         Keep items that are covered multiple times only
         in the layers with the highest densities
@@ -342,7 +342,7 @@ class LayerPool:
         return selected_layers.subset(not_empty_layers)
 
     def select_layers(
-        self, W, D, min_density=0.5, two_dims=True, max_coverage=3, remove_duplicated=True
+        self, W, D, min_density=0.5, two_dims=False, max_coverage=3, remove_duplicated=True
     ):
         """
         Perform post-processing steps to select the best layers in the pool

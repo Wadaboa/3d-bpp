@@ -255,7 +255,10 @@ def get_l1_lb(order, pallet_dims):
             js = get_js(j2, p, d3, bd3)
             jl = get_jl(j2, p, d3, bd3)
             a = np.ceil((js[d3].sum() - (len(jl) * bd3 - jl[d3].sum())) / bd3)
-            b = np.ceil((len(js) - (np.floor((bd3 - jl[d3].values) / p)).sum()) / np.floor(bd3 / p))
+            b = np.ceil(
+                (len(js) - (np.floor((bd3 - jl[d3].values) / p)).sum())
+                / np.floor(bd3 / p)
+            )
             max_ab = max(max_ab, a, b)
 
         return len(j2[j2[d3] > (bd3 / 2)]) + max_ab
@@ -270,6 +273,7 @@ def get_l1_lb(order, pallet_dims):
 def get_l2_lb(order, pallet_dims):
     """
     L2 lower bound for the minimum number of required bins
+    The worst-case performance of this bound is 2 / 3.
 
     Silvano Martello, David Pisinger and Daniele Vigo,
     "The Three-Dimensional Bin Packing Problem",
@@ -295,7 +299,10 @@ def get_l2_lb(order, pallet_dims):
         return l1 + max(
             0,
             np.ceil(
-                (pd.concat([kl, ks], axis=0).volume.sum() - (bd3 * l1 - kv[d3].sum()) * bd1 * bd2)
+                (
+                    pd.concat([kl, ks], axis=0).volume.sum()
+                    - (bd3 * l1 - kv[d3].sum()) * bd1 * bd2
+                )
                 / (bd1 * bd2 * bd3)
             ),
         )

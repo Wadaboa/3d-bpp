@@ -115,7 +115,7 @@ class ProductDataset:
         """
         Return a dummy order with products having the same height
         """
-        order = self.products.sample(ordered_products, replace=True)
+        order = self.get_order(ordered_products)
         order["height"] = order.sample(1).height.item()
         order["volume"] = order.width * order.depth * order.height
         return order

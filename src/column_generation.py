@@ -4,7 +4,7 @@ from ortools.sat.python import cp_model
 from ortools.linear_solver import pywraplp
 from tqdm import tqdm
 
-from . import layers, superitems, utils
+from . import layers, superitems, utils, maxrects
 
 
 STATUS_STRING = {
@@ -44,20 +44,12 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
         )
 
     # Objective
-    """
-    obj = sum(
-        ws[s] * ds[s] * hs[s] * zsl[s, l] * al[l]
-        for s in range(n_superitems)
-        for l in range(n_layers)
-    )
-    slv.Minimize(obj)
-    """
     obj = sum(h * al[l] for l, h in enumerate(ol))
     slv.Minimize(obj)
 
-    # Set a time limit
+    # Set a time limit in milliseconds
     if tlim is not None:
-        slv.SetTimeLimit(1000 * tlim)
+        slv.set_time_limit(1000 * tlim)
 
     # Solve
     status = slv.Solve()
@@ -79,7 +71,6 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
     slv = pywraplp.Solver.CreateSolver("CBC")
 
     # Utility
-    infinity = slv.infinity()
     n_superitems, n_items = fsi.shape
 
     # Variables
@@ -117,9 +108,9 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
     )
     slv.Minimize(obj)
 
-    # Set a time limit
+    # Set a time limit in milliseconds
     if tlim is not None:
-        slv.SetTimeLimit(1000 * tlim)
+        slv.set_time_limit(1000 * tlim)
 
     # Solve
     status = slv.Solve()
@@ -160,6 +151,10 @@ def pricing_problem_no_placement_test(fsi, ws, ds, hs, W, D, duals, feasibility=
         print("Adding feasibility constraint: num selected <=", feasibility - 1)
         mdl.Add(sum(zsl[s] for s in range(n_superitems)) <= feasibility - 1)
 
+    # No item repetition constraint
+    for i in range(n_items):
+        mdl.Add(sum([fsi[s, i] * zsl[s] for s in range(n_superitems)]) <= 1)
+
     # Objective
     obj = ol - sum(
         int(np.ceil(duals[i])) * fsi[s, i] * zsl[s]
@@ -177,9 +172,9 @@ def pricing_problem_no_placement_test(fsi, ws, ds, hs, W, D, duals, feasibility=
         cp_model.SELECT_MAX_VALUE,
     )
 
-    # Set a time limit
+    # Set a time limit in seconds
     if tlim is not None:
-        slv.SetTimeLimit(1000 * tlim)
+        slv.parameters.max_time_in_seconds = tlim
 
     slv.parameters.num_search_workers = 4
     # Solve
@@ -239,7 +234,7 @@ def pricing_problem_placement(superitems_in_layer, ws, ds, W, D, tlim=None):
 
     # Set a time limit
     if tlim is not None:
-        slv.SetTimeLimit(1000 * tlim)
+        slv.set_time_limit(1000 * tlim)
 
     # Solve
     status = slv.Solve()
@@ -265,12 +260,12 @@ def column_generation(
     return_warm_start=True,
 ):
     if not return_warm_start:
-        new_layer_pool = layers.LayerPool(layer_pool.superitems_pool)
+        new_layer_pool = layers.LayerPool(layer_pool.superitems_pool, add_single=False)
     W, D, _ = pallet_dims
-    fsi, _, _ = layer_pool.superitems_pool.get_fsi()
+    fsi, from_index_to_id, from_id_to_index = layer_pool.superitems_pool.get_fsi()
+    ws, ds, hs = layer_pool.superitems_pool.get_superitems_dims()
     zsl = layer_pool.get_zsl()
     ol = layer_pool.get_ol()
-    ws, ds, hs = layer_pool.superitems_pool.get_superitems_dims()
 
     n_superitems, n_items = fsi.shape
     best_rmp_obj, num_stag_iters = float("inf"), 0
@@ -316,6 +311,7 @@ def column_generation(
             )
             print("SP no placement time:", sp_np_time)
             superitems_in_layer = [s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1]
+            print(superitems_in_layer)
             feasibility = len(superitems_in_layer)
 
             # Non-negative reduced cost
@@ -324,7 +320,7 @@ def column_generation(
                 print("Reached convergence :)")
                 return layer_pool, best_rmp_obj
             if use_maxrect:
-                placed, layer = utils.maxrects_single_layer(
+                placed, layer = maxrects.maxrects_single_layer(
                     layer_pool.superitems_pool,
                     W,
                     D,

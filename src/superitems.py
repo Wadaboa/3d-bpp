@@ -543,7 +543,7 @@ class SuperitemPool:
         """
         item_ids = sorted(self.get_unique_item_ids())
         indexes = list(range(len(item_ids)))
-        from_index_to_item_id = dict(zip(item_ids, indexes))
+        from_index_to_item_id = dict(zip(indexes, item_ids))
         from_item_id_to_index = dict(zip(item_ids, indexes))
 
         fsi = np.zeros((len(self.superitems), self.get_num_unique_items()), dtype=int)

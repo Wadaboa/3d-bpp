@@ -175,7 +175,7 @@ class BinPool:
             spool = superitems.SuperitemPool(superitems=to_place)
             placed = False
             while not placed:
-                placed, layer = utils.maxrects_single_layer(spool, pallet_width, pallet_depth)
+                placed, layer = maxrects.maxrects_single_layer(spool, pallet_width, pallet_depth)
                 if not placed:
                     min_superitem, _ = spool.get_extreme_superitem(minimum=True, two_dims=False)
                     spool.remove(min_superitem)
@@ -209,8 +209,9 @@ class BinPool:
 
         # Get placeable and unplaceable items
         remaining_heights = self.get_remaining_heights()
+        max_remaining_height = 0 if len(remaining_heights) == 0 else max(remaining_heights)
         superitems_list, remaining_items = _get_unplaceable_items(
-            superitems_list, max(remaining_heights)
+            superitems_list, max_remaining_height
         )
         superitems_list = _place_new_layers(superitems_list, remaining_heights)
 
