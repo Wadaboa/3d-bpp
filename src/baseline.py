@@ -3,7 +3,7 @@ from ortools.sat.python import cp_model
 from . import utils, superitems, layers
 
 
-def baseline_model(fsi, ws, ds, hs, W, D, tlim=None, num_workers=4):
+def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
     # Model and solver declaration
     model = cp_model.CpModel()
     solver = cp_model.CpSolver()
@@ -16,8 +16,8 @@ def baseline_model(fsi, ws, ds, hs, W, D, tlim=None, num_workers=4):
     ol = {l: model.NewIntVar(0, max(hs), f"o_{l}") for l in range(max_layers)}
     zsl, cix, ciy, xsj, ysj = dict(), dict(), dict(), dict(), dict()
     for s in range(n_superitems):
-        cix[s] = model.NewIntVar(0, int(W - ws[s]), f"c_{s}_x")
-        ciy[s] = model.NewIntVar(0, int(D - ds[s]), f"c_{s}_y")
+        cix[s] = model.NewIntVar(0, int(pallet_dims.width - ws[s]), f"c_{s}_x")
+        ciy[s] = model.NewIntVar(0, int(pallet_dims.depth - ds[s]), f"c_{s}_y")
         for j in range(n_superitems):
             if j != s:
                 xsj[s, j] = model.NewBoolVar(f"x_{s}_{j}")
@@ -53,7 +53,7 @@ def baseline_model(fsi, ws, ds, hs, W, D, tlim=None, num_workers=4):
     # a layer to fit within the area of a bin
     model.Add(
         sum(ws[s] * ds[s] * zsl[s, l] for l in range(max_layers) for s in range(n_superitems))
-        <= W * D
+        <= pallet_dims.area
     )
 
     # Enforce at least one relative positioning relationship
@@ -80,12 +80,12 @@ def baseline_model(fsi, ws, ds, hs, W, D, tlim=None, num_workers=4):
         for s in range(n_superitems):
             for j in range(n_superitems):
                 if j != s:
-                    model.Add(cix[s] + ws[s] <= cix[j] + W * (1 - xsj[s, j])).OnlyEnforceIf(
-                        [same[s, j, l]]
-                    )
-                    model.Add(ciy[s] + ds[s] <= ciy[j] + D * (1 - ysj[s, j])).OnlyEnforceIf(
-                        [same[s, j, l]]
-                    )
+                    model.Add(
+                        cix[s] + ws[s] <= cix[j] + pallet_dims.width * (1 - xsj[s, j])
+                    ).OnlyEnforceIf([same[s, j, l]])
+                    model.Add(
+                        ciy[s] + ds[s] <= ciy[j] + pallet_dims.depth * (1 - ysj[s, j])
+                    ).OnlyEnforceIf([same[s, j, l]])
 
     # Objective
     obj = sum(ol[l] for l in range(max_layers))
@@ -125,14 +125,15 @@ def baseline_model(fsi, ws, ds, hs, W, D, tlim=None, num_workers=4):
 
 
 def call_baseline_model(superitems_pool, pallet_dims, tlim=None, num_workers=4):
-    W, D, _ = pallet_dims
     fsi, _, _ = superitems_pool.get_fsi()
     n_superitems, n_items = fsi.shape
     max_layers = n_items
     ws, ds, hs = superitems_pool.get_superitems_dims()
-    sol, solve_time = baseline_model(fsi, ws, ds, hs, W, D, tlim=tlim, num_workers=num_workers)
+    sol, solve_time = baseline_model(
+        fsi, ws, ds, hs, pallet_dims, tlim=tlim, num_workers=num_workers
+    )
 
-    layer_pool = layers.LayerPool(superitems_pool)
+    layer_pool = layers.LayerPool(superitems_pool, pallet_dims)
     for l in range(max_layers):
         if sol[f"o_{l}"] > 0:
             superitems_in_layer = [s for s in range(n_superitems) if sol[f"z_{s}_{l}"] == 1]
@@ -141,11 +142,7 @@ def call_baseline_model(superitems_pool, pallet_dims, tlim=None, num_workers=4):
                 spool += [superitems_pool[s]]
                 coords += [utils.Coordinate(x=sol[f"c_{s}_x"], y=sol[f"c_{s}_y"])]
             spool = superitems.SuperitemPool(superitems=spool)
-            layer = layers.Layer(
-                spool.get_max_height(),
-                spool,
-                coords,
-            )
+            layer = layers.Layer(spool, coords, pallet_dims)
             layer_pool.add(layer)
 
     return layer_pool

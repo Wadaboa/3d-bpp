@@ -346,161 +346,9 @@ class SuperitemPool:
     Set of superitems for a given order
     """
 
-    def __init__(
-        self,
-        order=None,
-        pallet_dims=None,
-        max_vstacked=2,
-        superitems=None,
-        only_single=False,
-        not_horizontal=False,
-    ):
-        self.superitems = (
-            self._gen_superitems(order, pallet_dims, max_vstacked, only_single, not_horizontal)
-            if order is not None
-            else superitems
-            if superitems is not None
-            else []
-        )
+    def __init__(self, superitems=None):
+        self.superitems = superitems or []
         self.hash_to_index = self._get_hash_to_index()
-
-    def _gen_superitems(self, order, pallet_dims, max_vstacked, only_single, not_horizontal):
-        """
-        Generate horizontal and vertical superitems and
-        filter the ones exceeding the pallet dimensions
-        """
-        items = Item.from_dataframe(order)
-        single_items_superitems = self._gen_single_items_superitems(items)
-        if only_single:
-            return single_items_superitems
-        if not_horizontal:
-            superitems_vertical = self._gen_superitems_vertical(
-                single_items_superitems, max_vstacked
-            )
-            superitems = single_items_superitems + superitems_vertical
-        else:
-            superitems_horizontal = self._gen_superitems_horizontal(single_items_superitems)
-            superitems_vertical = self._gen_superitems_vertical(
-                single_items_superitems + superitems_horizontal, max_vstacked
-            )
-            superitems = single_items_superitems + superitems_horizontal + superitems_vertical
-        if pallet_dims is not None:
-            superitems = self._filter_superitems(superitems, pallet_dims)
-        return superitems
-
-    def _gen_single_items_superitems(self, items):
-        """
-        Generate superitems with a single item
-        """
-        return [SingleItemSuperitem([i]) for i in items]
-
-    def _gen_superitems_horizontal(self, items):
-        """
-        Horizontally stack groups of 2 and 4 items with the same
-        dimensions to form single superitems
-        """
-        superitems_horizontal = []
-
-        # Get items having the exact same dimensions
-        dims = [(i.width, i.depth, i.height) for i in items]
-        indexes = list(range(len(dims)))
-        same_dims = defaultdict(list)
-        for k, v in zip(dims, indexes):
-            same_dims[k].append(v)
-
-        # Extract candidate groups made up of 2 and 4 items
-        two_slices, four_slices = [], []
-        for _, indexes in same_dims.items():
-            two_slices += [
-                (items[indexes[i]], items[indexes[i + 1]]) for i in range(0, len(indexes) - 1, 2)
-            ]
-            four_slices += [
-                (
-                    items[indexes[i]],
-                    items[indexes[i + 1]],
-                    items[indexes[i + 2]],
-                    items[indexes[i + 3]],
-                )
-                for i in range(0, len(indexes) - 3, 4)
-            ]
-
-        # Generate 2-items horizontal superitems
-        for slice in tqdm(two_slices, desc="Generating horizontal 2-items superitems"):
-            superitems_horizontal += [
-                TwoHorizontalSuperitemWidth(slice),
-                TwoHorizontalSuperitemDepth(slice),
-            ]
-
-        # Generate 4-items horizontal superitems
-        for slice in tqdm(four_slices, desc="Generating horizontal 4-items superitems"):
-            superitems_horizontal += [FourHorizontalSuperitem(slice)]
-
-        return superitems_horizontal
-
-    def _gen_superitems_vertical(self, superitems, max_vstacked, tol=0.7):
-        """
-        Divide superitems by width-depth ratio and vertically stack each group
-        """
-
-        def _gen_superitems_vertical_subgroup(superitems):
-            """
-            Vertically stack groups of >= 2 items or superitems with the
-            same dimensions to form a taller superitem
-            """
-            superitems_vertical = []
-
-            # Add the "width * depth" column and sort superitems
-            # in ascending order by that dimension
-            wd = [s.width * s.depth for s in superitems]
-            superitems = [superitems[i] for i in utils.argsort(wd)]
-
-            # Extract candidate groups made up of >= 2 items or superitems
-            slices = []
-            for s in range(2, max_vstacked + 1):
-                for i in range(0, len(superitems) - (s - 1), s):
-                    good = True
-                    for j in range(1, s, 1):
-                        if (
-                            superitems[i + j].width * superitems[i + j].depth
-                            >= superitems[i].width * superitems[i].depth
-                        ) and (
-                            superitems[i].width * superitems[i].depth
-                            <= 0.7 * superitems[i + j].width * superitems[i + j].depth
-                        ):
-                            good = False
-                            break
-                    if good:
-                        slices += [tuple(superitems[i + j] for j in range(s))]
-
-            # Generate vertical superitems
-            for slice in tqdm(slices, desc="Generating vertical superitems"):
-                superitems_vertical += [VerticalSuperitem(slice)]
-
-            return superitems_vertical
-
-        wide_superitems = []
-        deep_superitems = []
-        for s in superitems:
-            if s.width / s.depth >= 1:
-                wide_superitems.append(s)
-            else:
-                deep_superitems.append(s)
-
-        return _gen_superitems_vertical_subgroup(
-            wide_superitems
-        ) + _gen_superitems_vertical_subgroup(deep_superitems)
-
-    def _filter_superitems(self, superitems, pallet_dims):
-        """
-        Keep only those superitems that do not exceed the
-        pallet capacity
-        """
-        pallet_width, pallet_depth, pallet_height = pallet_dims
-        return [
-            s
-            for s in superitems
-            if s.width <= pallet_width and s.depth <= pallet_depth and s.height <= pallet_height
-        ]
 
     def add(self, superitem):
         """
@@ -616,6 +464,8 @@ class SuperitemPool:
         """
         Return the maximum height of the superitems in the pool
         """
+        if len(self.superitems) == 0:
+            return 0
         return max(s.height for s in self.superitems)
 
     def get_index(self, superitem):
@@ -647,3 +497,148 @@ class SuperitemPool:
 
     def __repr__(self):
         return self.__str__()
+
+    @classmethod
+    def gen_superitems(
+        cls, order, pallet_dims, max_vstacked=2, only_single=False, not_horizontal=False
+    ):
+        """
+        Generate horizontal and vertical superitems and
+        filter the ones exceeding the pallet dimensions
+        """
+        items = Item.from_dataframe(order)
+        single_items_superitems = cls._gen_single_items_superitems(items)
+        if only_single:
+            return single_items_superitems
+        if not_horizontal:
+            superitems_vertical = cls._gen_superitems_vertical(
+                single_items_superitems, max_vstacked
+            )
+            superitems = single_items_superitems + superitems_vertical
+        else:
+            superitems_horizontal = cls._gen_superitems_horizontal(single_items_superitems)
+            superitems_vertical = cls._gen_superitems_vertical(
+                single_items_superitems + superitems_horizontal, max_vstacked
+            )
+            superitems = single_items_superitems + superitems_horizontal + superitems_vertical
+        superitems = cls._filter_superitems(superitems, pallet_dims)
+        return superitems
+
+    @classmethod
+    def _gen_single_items_superitems(cls, items):
+        """
+        Generate superitems with a single item
+        """
+        return [SingleItemSuperitem([i]) for i in items]
+
+    @classmethod
+    def _gen_superitems_horizontal(cls, items):
+        """
+        Horizontally stack groups of 2 and 4 items with the same
+        dimensions to form single superitems
+        """
+        superitems_horizontal = []
+
+        # Get items having the exact same dimensions
+        dims = [(i.width, i.depth, i.height) for i in items]
+        indexes = list(range(len(dims)))
+        same_dims = defaultdict(list)
+        for k, v in zip(dims, indexes):
+            same_dims[k].append(v)
+
+        # Extract candidate groups made up of 2 and 4 items
+        two_slices, four_slices = [], []
+        for _, indexes in same_dims.items():
+            two_slices += [
+                (items[indexes[i]], items[indexes[i + 1]]) for i in range(0, len(indexes) - 1, 2)
+            ]
+            four_slices += [
+                (
+                    items[indexes[i]],
+                    items[indexes[i + 1]],
+                    items[indexes[i + 2]],
+                    items[indexes[i + 3]],
+                )
+                for i in range(0, len(indexes) - 3, 4)
+            ]
+
+        # Generate 2-items horizontal superitems
+        for slice in tqdm(two_slices, desc="Generating horizontal 2-items superitems"):
+            superitems_horizontal += [
+                TwoHorizontalSuperitemWidth(slice),
+                TwoHorizontalSuperitemDepth(slice),
+            ]
+
+        # Generate 4-items horizontal superitems
+        for slice in tqdm(four_slices, desc="Generating horizontal 4-items superitems"):
+            superitems_horizontal += [FourHorizontalSuperitem(slice)]
+
+        return superitems_horizontal
+
+    @classmethod
+    def _gen_superitems_vertical(cls, superitems, max_vstacked, tol=0.7):
+        """
+        Divide superitems by width-depth ratio and vertically stack each group
+        """
+
+        def _gen_superitems_vertical_subgroup(superitems):
+            """
+            Vertically stack groups of >= 2 items or superitems with the
+            same dimensions to form a taller superitem
+            """
+            superitems_vertical = []
+
+            # Add the "width * depth" column and sort superitems
+            # in ascending order by that dimension
+            wd = [s.width * s.depth for s in superitems]
+            superitems = [superitems[i] for i in utils.argsort(wd)]
+
+            # Extract candidate groups made up of >= 2 items or superitems
+            slices = []
+            for s in range(2, max_vstacked + 1):
+                for i in range(0, len(superitems) - (s - 1), s):
+                    good = True
+                    for j in range(1, s, 1):
+                        if (
+                            superitems[i + j].width * superitems[i + j].depth
+                            >= superitems[i].width * superitems[i].depth
+                        ) and (
+                            superitems[i].width * superitems[i].depth
+                            <= tol * superitems[i + j].width * superitems[i + j].depth
+                        ):
+                            good = False
+                            break
+                    if good:
+                        slices += [tuple(superitems[i + j] for j in range(s))]
+
+            # Generate vertical superitems
+            for slice in tqdm(slices, desc="Generating vertical superitems"):
+                superitems_vertical += [VerticalSuperitem(slice)]
+
+            return superitems_vertical
+
+        wide_superitems = []
+        deep_superitems = []
+        for s in superitems:
+            if s.width / s.depth >= 1:
+                wide_superitems.append(s)
+            else:
+                deep_superitems.append(s)
+
+        return _gen_superitems_vertical_subgroup(
+            wide_superitems
+        ) + _gen_superitems_vertical_subgroup(deep_superitems)
+
+    @classmethod
+    def _filter_superitems(cls, superitems, pallet_dims):
+        """
+        Keep only those superitems that do not exceed the
+        pallet capacity
+        """
+        return [
+            s
+            for s in superitems
+            if s.width <= pallet_dims.width
+            and s.depth <= pallet_dims.depth
+            and s.height <= pallet_dims.height
+        ]

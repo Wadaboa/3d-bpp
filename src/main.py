@@ -2,22 +2,23 @@ from . import layers, superitems, config, maxrects, column_generation, baseline
 
 
 def baseline_procedure(order, tlim=None):
-    final_layer_pool = layers.LayerPool(superitems.SuperitemPool())
+    final_layer_pool = layers.LayerPool(superitems.SuperitemPool(), config.PALLET_DIMS)
     working_order = order.copy()
     for it in range(1):
+
         superitems_pool = superitems.SuperitemPool(
-            order=working_order,
-            pallet_dims=config.PALLET_DIMS,
-            max_vstacked=4,
-            not_horizontal=True,
+            superitems=superitems.SuperitemPool.gen_superitems(
+                order=working_order,
+                pallet_dims=config.PALLET_DIMS,
+                max_vstacked=4,
+                not_horizontal=True,
+            )
         )
 
         layer_pool = baseline.call_baseline_model(superitems_pool, config.PALLET_DIMS, tlim=tlim)
         final_layer_pool.extend(layer_pool)
 
-        final_layer_pool = final_layer_pool.select_layers(
-            config.PALLET_WIDTH, config.PALLET_DEPTH, min_density=0.5, max_coverage=3
-        )
+        final_layer_pool = final_layer_pool.select_layers(min_density=0.5, max_coverage=3)
 
         item_coverage = final_layer_pool.item_coverage()
         not_covered = [k for k, v in item_coverage.items() if not v]
@@ -29,12 +30,14 @@ def baseline_procedure(order, tlim=None):
 
 def maxrect_procedure(order):
     superitems_pool = superitems.SuperitemPool(
-        order=order,
-        pallet_dims=config.PALLET_DIMS,
-        max_vstacked=4,
-        not_horizontal=True,
+        superitems=superitems.SuperitemPool.gen_superitems(
+            order=order,
+            pallet_dims=config.PALLET_DIMS,
+            max_vstacked=4,
+            not_horizontal=True,
+        )
     )
-    final_layer_pool = layers.LayerPool(superitems_pool)
+    final_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS)
     height_groups = get_height_groups(
         superitems_pool, config.PALLET_DIMS, height_tol=50, density_tol=0.5
     )
@@ -45,28 +48,33 @@ def maxrect_procedure(order):
         )
         final_layer_pool.extend(working_layer_pool)
 
-    # Add single item superitems that were discarded by
-    # the initial height groups procedure
+    print(len(final_layer_pool))
+
     final_layer_pool = final_layer_pool.select_layers(
-        config.PALLET_WIDTH,
-        config.PALLET_DEPTH,
         min_density=0.5,
         two_dims=False,
         max_coverage=3,
         remove_duplicated=True,
     )
+    print(len(final_layer_pool))
+    item_coverage = final_layer_pool.item_coverage()
+    not_covered = [k for k, v in item_coverage.items() if not v]
+    print(f"Items not covered: {len(not_covered)}/{len(item_coverage)}")
 
     return final_layer_pool
 
 
 def column_generation_procedure(order, use_height_groups=True):
     superitems_pool = superitems.SuperitemPool(
-        order=order,
-        pallet_dims=config.PALLET_DIMS,
-        max_vstacked=4,
-        not_horizontal=True,
+        superitems=superitems.SuperitemPool.gen_superitems(
+            order=order,
+            pallet_dims=config.PALLET_DIMS,
+            max_vstacked=4,
+            not_horizontal=True,
+            only_single=True,
+        )
     )
-    final_layer_pool = layers.LayerPool(superitems_pool, add_single=False)
+    final_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS, add_single=False)
     bins_lbs = []
 
     if use_height_groups:
@@ -78,14 +86,17 @@ def column_generation_procedure(order, use_height_groups=True):
 
     for i, spool in enumerate(height_groups):
         print(f"Height group {i + 1}/{len(height_groups)}")
+
         mr_layer_pool = maxrects.maxrects_multiple_layers(
             spool, config.PALLET_DIMS, add_single=True
         )
+        num_mr_layers = len(mr_layer_pool) - len(spool)
+        # mr_layer_pool = layers.LayerPool(spool, add_single=True)
         working_layer_pool, bins_lb = column_generation.column_generation(
             mr_layer_pool,
             config.PALLET_DIMS,
             max_iter=100,
-            max_stag_iters=20,
+            max_stag_iters=num_mr_layers + 1,
             tlim=5,
             use_maxrect=True,
             return_warm_start=False,
@@ -93,12 +104,9 @@ def column_generation_procedure(order, use_height_groups=True):
         bins_lbs.append(bins_lb)
         final_layer_pool.extend(working_layer_pool)
 
-
         # Add single item superitems that were discarded by
         # the initial height groups procedure
         filtered_layer_pool = final_layer_pool.select_layers(
-            config.PALLET_WIDTH,
-            config.PALLET_DEPTH,
             min_density=0.5,
             two_dims=False,
             max_coverage=3,
@@ -136,10 +144,9 @@ def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.
             s for s in superitems_pool if s.height >= height and s.height <= height + height_tol
         ]
         spool = superitems.SuperitemPool(superitems=spool)
-        pallet_width, pallet_depth, _ = pallet_dims
         if (
             sum(s.volume for s in spool)
-            >= density_tol * spool.get_max_height() * pallet_width * pallet_depth
+            >= density_tol * spool.get_max_height() * pallet_dims.width * pallet_dims.depth
         ):
             groups += [spool]
 

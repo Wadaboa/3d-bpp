@@ -1,6 +1,7 @@
 import numpy as np
-from rectpack import newPacker, PackingMode, PackingBin, SORT_AREA
-from rectpack.maxrects import MaxRectsBaf
+from matplotlib import pyplot as plt
+from rectpack import newPacker, PackingMode, PackingBin, SORT_AREA, SORT_SSIDE
+from rectpack.maxrects import MaxRectsBaf, MaxRectsBl, MaxRectsBlsf, MaxRectsBssf
 
 from . import utils, layers, superitems
 
@@ -13,10 +14,10 @@ def maxrects_multiple_layers(superitems_pool, pallet_dims, add_single=True):
     # Return a layer with a single item if only one
     # is present in the superitems pool
     if len(superitems_pool) == 1:
-        return layers.LayerPool(superitems_pool, add_single=True)
+        return layers.LayerPool(superitems_pool, pallet_dims, add_single=True)
 
     # Build initial layer pool
-    layer_pool = layers.LayerPool(superitems_pool, add_single=add_single)
+    layer_pool = layers.LayerPool(superitems_pool, pallet_dims, add_single=add_single)
 
     # Create the maxrects packing algorithm
     packer = newPacker(
@@ -28,8 +29,7 @@ def maxrects_multiple_layers(superitems_pool, pallet_dims, add_single=True):
     )
 
     # Add an infinite number of layers (no upper bound)
-    pallet_width, pallet_depth, _ = pallet_dims
-    packer.add_bin(pallet_width, pallet_depth, count=float("inf"))
+    packer.add_bin(pallet_dims.width, pallet_dims.depth, count=float("inf"))
 
     # Add superitems to be packed
     ws, ds, _ = superitems_pool.get_superitems_dims()
@@ -48,48 +48,50 @@ def maxrects_multiple_layers(superitems_pool, pallet_dims, add_single=True):
             scoords += [utils.Coordinate(superitem.x, superitem.y)]
 
         spool = superitems.SuperitemPool(superitems=spool)
-        height = spool.get_max_height()
-        layer_pool.add(layers.Layer(height, spool, scoords))
+        l = layers.Layer(spool, scoords, pallet_dims)
+        layer_pool.add(l)
 
     return layer_pool
 
 
-def maxrects_single_layer(superitems_pool, W, D, superitems_in_layer=None):
+def maxrects_single_layer(superitems_pool, pallet_dims, superitems_in_layer=None):
     """
     Given a superitems pool and the maximum dimensions to pack them into,
     try to fit each superitem in a single layer (if not possible, return an error)
     """
+    pack_algs = [MaxRectsBaf, MaxRectsBssf, MaxRectsBlsf, MaxRectsBl]
+
     ws, ds, _ = superitems_pool.get_superitems_dims()
 
     # Set all superitems in layer
     if superitems_in_layer is None:
         superitems_in_layer = np.arange(len(superitems_pool))
 
-    # Create the maxrects packing algorithm
-    packer = newPacker(
-        mode=PackingMode.Offline,
-        bin_algo=PackingBin.Global,
-        pack_algo=MaxRectsBaf,
-        sort_algo=SORT_AREA,
-        rotation=False,
-    )
+    for alg in pack_algs:
 
-    # Add one bin representing one layer
-    packer.add_bin(W, D, count=1)
+        # Create the maxrects packing algorithm
+        packer = newPacker(
+            mode=PackingMode.Offline,
+            bin_algo=PackingBin.Global,
+            pack_algo=alg,
+            sort_algo=SORT_AREA,
+            rotation=False,
+        )
 
-    # Add superitems to be packed
-    for i in superitems_in_layer:
-        packer.add_rect(ws[i], ds[i], rid=i)
+        # Add one bin representing one layer
+        packer.add_bin(pallet_dims.width, pallet_dims.depth, count=1)
 
-    # Start the packing procedure
-    packer.pack()
+        # Add superitems to be packed
+        for i in superitems_in_layer:
+            packer.add_rect(ws[i], ds[i], rid=i)
 
-    # Unfeasible or incomplete packing
-    if len(packer) == 0 or len(packer[0]) < len(superitems_in_layer):
-        return False, None
+        # Start the packing procedure
+        packer.pack()
 
-    # Feasible packing with a single layer
-    spool = superitems.SuperitemPool(superitems=[superitems_pool[s.rid] for s in packer[0]])
-    return True, layers.Layer(
-        spool.get_max_height(), spool, [utils.Coordinate(s.x, s.y) for s in packer[0]]
-    )
+        if len(packer) == 1 and len(packer[0]) == len(superitems_in_layer):
+            # Feasible packing with a single layer
+            spool = superitems.SuperitemPool(superitems=[superitems_pool[s.rid] for s in packer[0]])
+            return True, layers.Layer(
+                spool, [utils.Coordinate(s.x, s.y) for s in packer[0]], pallet_dims
+            )
+    return False, None

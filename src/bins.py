@@ -28,8 +28,7 @@ class Bin:
         """
         Return the height remaining to fill up the bin
         """
-        _, _, pallet_height = self.pallet_dims
-        return pallet_height - self.height
+        return self.pallet_dims.height - self.height
 
     def get_layer_zs(self):
         heights = [0]
@@ -37,31 +36,7 @@ class Bin:
             heights += [heights[-1] + layer.height]
         return heights
 
-    def add_product_to_pallet(self, ax, item_id, coords, dims):
-        vertices = utils.Vertices(coords, dims)
-        ax.scatter3D(vertices.get_xs(), vertices.get_ys(), vertices.get_zs())
-        ax.add_collection3d(
-            Poly3DCollection(
-                vertices.to_faces(),
-                facecolors=np.random.rand(1, 3),
-                linewidths=1,
-                edgecolors="r",
-                alpha=0.45,
-            )
-        )
-        center = vertices.get_center()
-        ax.text(
-            center.x,
-            center.y,
-            center.z,
-            item_id,
-            size=10,
-            zorder=1,
-            color="k",
-        )
-        return ax
-
-    def get_pallet_plot(self):
+    def _get_pallet_plot(self):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
         ax.set_xlabel("x")
@@ -69,22 +44,16 @@ class Bin:
         ax.set_zlabel("z")
         ax.text(0, 0, 0, "origin", size=10, zorder=1, color="k")
         ax.view_init(azim=60)
-        pallet_width, pallet_depth, pallet_height = self.pallet_dims
-        ax.set_xlim3d(0, pallet_width)
-        ax.set_ylim3d(0, pallet_depth)
-        ax.set_zlim3d(0, pallet_height)
+        ax.set_xlim3d(0, self.pallet_dims.width)
+        ax.set_ylim3d(0, self.pallet_dims.depth)
+        ax.set_zlim3d(0, self.pallet_dims.height)
         return ax
 
     def plot(self):
         height = 0
-        ax = self.get_pallet_plot()
+        ax = self._get_pallet_plot()
         for layer in self.layer_pool:
-            items_coords = layer.get_items_coords(z=height)
-            items_dims = layer.get_items_dims()
-            for item_id in items_coords.keys():
-                coords = items_coords[item_id]
-                dims = items_dims[item_id]
-                ax = self.add_product_to_pallet(ax, item_id, coords, dims)
+            ax = layer.plot(ax=ax, height=height)
             height += layer.height
         return ax
 
@@ -103,9 +72,9 @@ class BinPool:
     A pool of bins is a collection of bins
     """
 
-    def __init__(self, layer_pool, pallet_dims):
+    def __init__(self, layer_pool, pallet_dims, two_dims=False):
         self.layer_pool = layer_pool
-        self.layer_pool.sort_by_densities(pallet_dims[0], pallet_dims[1])
+        self.layer_pool.sort_by_densities(two_dims=two_dims)
         self.pallet_dims = pallet_dims
         self.bins = self._build(self.layer_pool)
         self._place_not_covered()
@@ -116,13 +85,12 @@ class BinPool:
         the given layers
         """
         bins = []
-        _, _, pallet_height = self.pallet_dims
         for i, layer in enumerate(layer_pool):
             placed = False
 
             # Place the layer in an already opened bin
             for bin in bins:
-                if bin.height + layer.height <= pallet_height:
+                if bin.height + layer.height <= self.pallet_dims.height:
                     bin.add(layer)
                     placed = True
 
@@ -154,11 +122,10 @@ class BinPool:
             Return items that can be placed in a new layer
             in the given bin
             """
-            pallet_width, pallet_depth, _ = self.pallet_dims
             to_place = []
             for s in superitems_list:
                 last_layer_area = working_bin.layer_pool[-1].area
-                max_area = np.clip(area_tol * last_layer_area, 0, pallet_width * pallet_depth)
+                max_area = np.clip(area_tol * last_layer_area, 0, self.pallet_dims.area)
                 area = sum(s.area for s in to_place)
                 if area < max_area and s.height < working_bin.remaining_height:
                     to_place += [s]
@@ -171,11 +138,12 @@ class BinPool:
             Place the maximum amount of items that can fit in
             a new layer, starting from the given pool
             """
-            pallet_width, pallet_depth, _ = self.pallet_dims
+            # TODO use Online version of maxrect to avoid 'while not placed'
+            assert len(to_place) > 0, "Cannot place empty pool"
             spool = superitems.SuperitemPool(superitems=to_place)
             placed = False
             while not placed:
-                placed, layer = maxrects.maxrects_single_layer(spool, pallet_width, pallet_depth)
+                placed, layer = maxrects.maxrects_single_layer(spool, self.pallet_dims)
                 if not placed:
                     min_superitem, _ = spool.get_extreme_superitem(minimum=True, two_dims=False)
                     spool.remove(min_superitem)

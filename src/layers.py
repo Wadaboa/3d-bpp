@@ -2,6 +2,8 @@ import copy
 
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from . import utils, superitems, maxrects
 
@@ -12,10 +14,17 @@ class Layer:
     items or superitems having similar heights
     """
 
-    def __init__(self, height, superitems_pool, superitems_coords):
-        self.height = int(height)
+    def __init__(self, superitems_pool, superitems_coords, pallet_dims):
         self.superitems_pool = superitems_pool
         self.superitems_coords = superitems_coords
+        self.pallet_dims = pallet_dims
+
+    @property
+    def height(self):
+        return self.superitems_pool.get_max_height()
+
+    def is_empty(self):
+        return len(self.superitems_pool) == 0 and len(self.superitems_coords) == 0
 
     def get_items_coords(self, z=0):
         """
@@ -49,11 +58,15 @@ class Layer:
         """
         return self.superitems_pool.get_unique_item_ids()
 
-    def get_density(self, W, D, two_dims=False):
+    def get_density(self, two_dims=False):
         """
         Compute the 2D/3D density of the layer
         """
-        return self.volume / (W * D * self.height) if not two_dims else self.area / (W * D)
+        return (
+            self.volume / (self.pallet_dims.area * self.height)
+            if not two_dims
+            else self.area / self.pallet_dims.area
+        )
 
     def remove(self, superitem):
         """
@@ -99,13 +112,66 @@ class Layer:
             }
         )
 
-    def rearrange(self, W, D):
+    def rearrange(self):
         """
         Apply maxrects over superitems in layer
         """
-        placed, layer = maxrects.maxrects_single_layer(self.superitems_pool, W, D)
-        assert placed, "Couldn't rearrange superitems"
-        return layer
+        placed, layer = maxrects.maxrects_single_layer(self.superitems_pool, self.pallet_dims)
+        return placed, layer
+
+    def plot(self, ax=None, height=0):
+        if ax == None:
+            ax = self._get_layer_plot()
+        items_coords = self.get_items_coords(z=height)
+        items_dims = self.get_items_dims()
+        for item_id in items_coords.keys():
+            coords = items_coords[item_id]
+            dims = items_dims[item_id]
+            ax = self._plot_product(ax, item_id, coords, dims)
+        return ax
+
+    def _get_layer_plot(self):
+        """
+        Return a matplotlib plot for the layer instance
+        """
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="3d")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_zlabel("z")
+        ax.text(0, 0, 0, "origin", size=10, zorder=1, color="k")
+        ax.view_init(azim=60)
+        ax.set_xlim3d(0, self.pallet_dims.width)
+        ax.set_ylim3d(0, self.pallet_dims.depth)
+        ax.set_zlim3d(0, self.height)
+        return ax
+
+    def _plot_product(self, ax, item_id, coords, dims):
+        """
+        Add product to given axis
+        """
+        vertices = utils.Vertices(coords, dims)
+        ax.scatter3D(vertices.get_xs(), vertices.get_ys(), vertices.get_zs())
+        ax.add_collection3d(
+            Poly3DCollection(
+                vertices.to_faces(),
+                facecolors=np.random.rand(1, 3),
+                linewidths=1,
+                edgecolors="r",
+                alpha=0.45,
+            )
+        )
+        center = vertices.get_center()
+        ax.text(
+            center.x,
+            center.y,
+            center.z,
+            item_id,
+            size=10,
+            zorder=1,
+            color="k",
+        )
+        return ax
 
     def __str__(self):
         return f"Layer(height={self.height}, ids={self.superitems_pool.get_unique_item_ids()})"
@@ -133,21 +199,13 @@ class LayerPool:
     A layer pool is a collection of layers
     """
 
-    def __init__(self, superitems_pool, layers=None, add_single=False):
+    def __init__(self, superitems_pool, pallet_dims, layers=None, add_single=False):
         self.superitems_pool = superitems_pool
+        self.pallet_dims = pallet_dims
         self.layers = layers or []
+
         if add_single:
             self._add_single_layers()
-
-    def subset(self, layer_indices=None):
-        """
-        Return a new layer pool with the given subset of layers
-        and the same superitems pool
-        """
-        layers = [
-            l for i, l in enumerate(self.layers) if layer_indices is None or i in layer_indices
-        ]
-        return LayerPool(self.superitems_pool, layers=layers, add_single=False)
 
     def _add_single_layers(self):
         """
@@ -157,11 +215,19 @@ class LayerPool:
         for superitem in self.superitems_pool:
             self.add(
                 Layer(
-                    superitem.height,
-                    superitems.SuperitemPool(superitems=[superitem]),
+                    superitems.SuperitemPool([superitem]),
                     [utils.Coordinate(x=0, y=0)],
+                    self.pallet_dims,
                 )
             )
+
+    def subset(self, layer_indices):
+        """
+        Return a new layer pool with the given subset of layers
+        and the same superitems pool
+        """
+        layers = [l for i, l in enumerate(self.layers) if i in layer_indices]
+        return LayerPool(self.superitems_pool, self.pallet_dims, layers=layers)
 
     def get_ol(self):
         """
@@ -187,6 +253,8 @@ class LayerPool:
         Add the given Layer to the current pool
         """
         assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
+        # check_dims = layer.pallet_dims == self.pallet_dims
+        # assert check_dims, "The given layer is built on different pallet dimensions"
         # if layer not in self.layers:
         self.layers.append(layer)
 
@@ -197,6 +265,8 @@ class LayerPool:
         assert isinstance(
             layer_pool, LayerPool
         ), "The given set of layers should be an instance of the LayerPool class"
+        check_dims = layer_pool.pallet_dims == self.pallet_dims
+        assert check_dims, "The given LayerPool is defined over different pallet dimensions"
         for layer in layer_pool:
             self.add(layer)
         self.superitems_pool.extend(layer_pool.superitems_pool)
@@ -219,27 +289,27 @@ class LayerPool:
         """
         return self.superitems_pool.get_unique_item_ids()
 
-    def get_densities(self, W, D, two_dims=False):
+    def get_densities(self, two_dims=False):
         """
         Compute the 2D/3D density of each layer in the pool
         """
-        return [layer.get_density(W=W, D=D, two_dims=two_dims) for layer in self.layers]
+        return [layer.get_density(two_dims=two_dims) for layer in self.layers]
 
-    def sort_by_densities(self, W, D, two_dims=False):
+    def sort_by_densities(self, two_dims=False):
         """
         Sort layers in the pool by decreasing density
         """
-        densities = self.get_densities(W, D, two_dims=two_dims)
+        densities = self.get_densities(two_dims=two_dims)
         sorted_indices = np.array(densities).argsort()[::-1]
         self.layers = [self.layers[i] for i in sorted_indices]
 
-    def discard_by_densities(self, W, D, min_density=0.5, two_dims=False):
+    def discard_by_densities(self, min_density=0.5, two_dims=False):
         """
         Sort layers by densities and keep only those with a
         density greater than or equal to the given minimum
         """
-        self.sort_by_densities(W, D, two_dims=two_dims)
-        densities = self.get_densities(W, D, two_dims=two_dims)
+        self.sort_by_densities(two_dims=two_dims)
+        densities = self.get_densities(two_dims=two_dims)
         last_index = -1
         for i, d in enumerate(densities):
             if d >= min_density:
@@ -255,7 +325,7 @@ class LayerPool:
         all_item_ids = self.get_unique_items_ids()
         item_coverage = dict(zip(all_item_ids, [0] * len(all_item_ids)))
         layers_to_select = []
-        for i, layer in enumerate(self.layers):
+        for l, layer in enumerate(self.layers):
             to_select = True
             already_covered = 0
 
@@ -284,13 +354,13 @@ class LayerPool:
             # for each item in such layer and add it to the pool
             # of selected layers
             if to_select:
-                layers_to_select += [i]
+                layers_to_select += [l]
                 for item in item_ids:
                     item_coverage[item] += 1
 
         return self.subset(layers_to_select)
 
-    def remove_duplicated_items(self, W, D, min_density=0.5, two_dims=False):
+    def remove_duplicated_items(self, min_density=0.5, two_dims=False):
         """
         Keep items that are covered multiple times only
         in the layers with the highest densities
@@ -310,7 +380,7 @@ class LayerPool:
 
             # Flag the layer if it doesn't respect the minimum density,
             # or update item coverage otherwise
-            density = layer.get_density(W=W, D=D, two_dims=two_dims)
+            density = layer.get_density(two_dims=two_dims)
             if density < min_density or density == 0:
                 to_remove += [l]
             else:
@@ -321,10 +391,15 @@ class LayerPool:
         # Rearrange layers in which at least one superitem was removed
         for l in edited_layers:
             if l not in to_remove:
-                selected_layers[l] = selected_layers[l].rearrange(W, D)
+                placed, layer = selected_layers[l].rearrange()
+                if placed:
+                    selected_layers[l] = layer
+                else:
+                    print("Couldn't rearrange layer: ", l)
 
         # Remove edited layers that do not respect the minimum
         # density requirement after removing at least one superitem
+        # removing layers last to first to avoid indexing errors
         for l in sorted(to_remove, reverse=True):
             selected_layers.pop(l)
 
@@ -334,27 +409,28 @@ class LayerPool:
         """
         Check and remove layers without any items
         """
-        selected_layers = copy.deepcopy(self)
         not_empty_layers = []
-        for l, layer in enumerate(selected_layers.layers):
-            if layer.volume != 0:
+        for l, layer in enumerate(self.layers):
+            if not layer.is_empty():
                 not_empty_layers.append(l)
-        return selected_layers.subset(not_empty_layers)
+        return self.subset(not_empty_layers)
 
     def select_layers(
-        self, W, D, min_density=0.5, two_dims=False, max_coverage=3, remove_duplicated=True
+        self, min_density=0.5, two_dims=False, max_coverage=3, remove_duplicated=True
     ):
         """
         Perform post-processing steps to select the best layers in the pool
         """
-        new_pool = self.discard_by_densities(W, D, min_density=min_density, two_dims=two_dims)
+        new_pool = self.discard_by_densities(min_density=min_density, two_dims=two_dims)
+        print("Density", len(new_pool))
         new_pool = new_pool.discard_by_coverage(max_coverage=max_coverage)
+        print("Coverage", len(new_pool))
         if remove_duplicated:
-            new_pool = new_pool.remove_duplicated_items(
-                W, D, min_density=min_density, two_dims=two_dims
-            )
+            new_pool = new_pool.remove_duplicated_items(min_density=min_density, two_dims=two_dims)
+        print("Duplicates", len(new_pool))
         new_pool = new_pool.remove_empty_layers()
-        new_pool.sort_by_densities(W, D, two_dims=two_dims)
+        print("Empty", len(new_pool))
+        new_pool.sort_by_densities(two_dims=two_dims)
         return new_pool
 
     def item_coverage(self):
@@ -381,6 +457,8 @@ class LayerPool:
         return list(not_covered)
 
     def to_dataframe(self, zs=None):
+        if len(self) == 0:
+            return pd.DataFrame()
         if zs is None:
             zs = [0] * len(self)
         dfs = []

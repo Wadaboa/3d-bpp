@@ -22,7 +22,6 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
         slv = pywraplp.Solver.CreateSolver("GLOP")
     else:
         slv = pywraplp.Solver.CreateSolver("CBC")
-
     slv.SetNumThreads(8)
 
     # Utility
@@ -32,9 +31,9 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
 
     # Variables
     if relaxation:
-        al = [slv.NumVar(0, infinity, f"alpha_{l}") for l in range(n_layers)]
+        al = [slv.NumVar(0, 1, f"alpha_{l}") for l in range(n_layers)]
     else:
-        al = [slv.IntVar(0, 1, f"alpha_{l}") for l in range(n_layers)]
+        al = [slv.BoolVar(f"alpha_{l}") for l in range(n_layers)]
 
     # Constraints
     for i in range(n_items):
@@ -66,10 +65,9 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
     return sol, slv.WallTime() / 1000, duals
 
 
-def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None):
+def pricing_problem_no_placement(fsi, ws, ds, hs, pallet_dims, duals, feasibility=None, tlim=None):
     # Solver
     slv = pywraplp.Solver.CreateSolver("CBC")
-
     # Utility
     n_superitems, n_items = fsi.shape
 
@@ -80,7 +78,7 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
     # Constraints
     # Redundant valid cuts that force the area of
     # a layer to fit within the area of a bin
-    slv.Add(sum(ws[s] * ds[s] * zsl[s] for s in range(n_superitems)) <= W * D)
+    slv.Add(sum(ws[s] * ds[s] * zsl[s] for s in range(n_superitems)) <= pallet_dims.area)
     for s in range(n_superitems):
         # Define the height of layer l
         slv.Add(ol >= hs[s] * zsl[s])
@@ -126,7 +124,9 @@ def pricing_problem_no_placement(fsi, ws, ds, hs, W, D, duals, feasibility=None,
     return sol, slv.WallTime() / 1000
 
 
-def pricing_problem_no_placement_test(fsi, ws, ds, hs, W, D, duals, feasibility=None, tlim=None):
+def pricing_problem_no_placement_test(
+    fsi, ws, ds, hs, pallet_dims, duals, feasibility=None, tlim=None
+):
     # Model and Solver
     mdl = cp_model.CpModel()
     slv = cp_model.CpSolver()
@@ -141,7 +141,7 @@ def pricing_problem_no_placement_test(fsi, ws, ds, hs, W, D, duals, feasibility=
     # Constraints
     # Redundant valid cuts that force the area of
     # a layer to fit within the area of a bin
-    mdl.Add(sum(ws[s] * ds[s] * zsl[s] for s in range(n_superitems)) <= W * D)
+    mdl.Add(sum(ws[s] * ds[s] * zsl[s] for s in range(n_superitems)) <= pallet_dims.area)
     for s in range(n_superitems):
         # Define the height of layer l
         mdl.Add(ol >= hs[s] * zsl[s])
@@ -191,13 +191,13 @@ def pricing_problem_no_placement_test(fsi, ws, ds, hs, W, D, duals, feasibility=
     return sol, slv.WallTime() / 1000
 
 
-def pricing_problem_placement(superitems_in_layer, ws, ds, W, D, tlim=None):
+def pricing_problem_placement(superitems_in_layer, ws, ds, pallet_dims, tlim=None):
     # Solver
     slv = pywraplp.Solver.CreateSolver("CBC")
 
     # Variables
-    cix = {s: slv.IntVar(0, int(W - ws[s]), f"c_{s}_x") for s in superitems_in_layer}
-    ciy = {s: slv.IntVar(0, int(D - ds[s]), f"c_{s}_y") for s in superitems_in_layer}
+    cix = {s: slv.IntVar(0, pallet_dims.width - ws[s], f"c_{s}_x") for s in superitems_in_layer}
+    ciy = {s: slv.IntVar(0, pallet_dims.depth - ds[s], f"c_{s}_y") for s in superitems_in_layer}
     xsj, ysj = dict(), dict()
     for s in superitems_in_layer:
         for j in superitems_in_layer:
@@ -208,7 +208,7 @@ def pricing_problem_placement(superitems_in_layer, ws, ds, W, D, tlim=None):
     # Constraints
     # Redundant valid cuts that force the area of
     # a layer to fit within the area of a bin
-    slv.Add(sum(ws[s] * ds[s] for s in superitems_in_layer) <= W * D)
+    slv.Add(sum(ws[s] * ds[s] for s in superitems_in_layer) <= pallet_dims.area)
 
     # Enforce at least one relative positioning relationship
     # between each pair of items in a layer
@@ -229,8 +229,8 @@ def pricing_problem_placement(superitems_in_layer, ws, ds, W, D, tlim=None):
     for s in superitems_in_layer:
         for j in superitems_in_layer:
             if j != s:
-                slv.Add(cix[s] + ws[s] <= cix[j] + W * (1 - xsj[s, j]))
-                slv.Add(ciy[s] + ds[s] <= ciy[j] + D * (1 - ysj[s, j]))
+                slv.Add(cix[s] + ws[s] <= cix[j] + pallet_dims.width * (1 - xsj[s, j]))
+                slv.Add(ciy[s] + ds[s] <= ciy[j] + pallet_dims.depth * (1 - ysj[s, j]))
 
     # Set a time limit
     if tlim is not None:
@@ -260,8 +260,7 @@ def column_generation(
     return_warm_start=True,
 ):
     if not return_warm_start:
-        new_layer_pool = layers.LayerPool(layer_pool.superitems_pool, add_single=False)
-    W, D, _ = pallet_dims
+        new_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
     fsi, from_index_to_id, from_id_to_index = layer_pool.superitems_pool.get_fsi()
     ws, ds, hs = layer_pool.superitems_pool.get_superitems_dims()
     zsl = layer_pool.get_zsl()
@@ -269,8 +268,6 @@ def column_generation(
 
     n_superitems, n_items = fsi.shape
     best_rmp_obj, num_stag_iters = float("inf"), 0
-    # TODO try to filter on last alpha values
-    # convergence = False
     for i in range(max_iter):
         print(f"Iteration {i + 1}/{max_iter}")
 
@@ -307,7 +304,7 @@ def column_generation(
         while not placed:
             print("Solving SP (no placement)...")
             sp_np_sol, sp_np_time = pricing_problem_no_placement_test(
-                fsi, ws, ds, hs, W, D, duals, feasibility=feasibility, tlim=tlim
+                fsi, ws, ds, hs, pallet_dims, duals, feasibility=feasibility, tlim=tlim
             )
             print("SP no placement time:", sp_np_time)
             superitems_in_layer = [s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1]
@@ -322,8 +319,7 @@ def column_generation(
             if use_maxrect:
                 placed, layer = maxrects.maxrects_single_layer(
                     layer_pool.superitems_pool,
-                    W,
-                    D,
+                    pallet_dims,
                     superitems_in_layer=superitems_in_layer,
                 )
             else:
@@ -335,14 +331,14 @@ def column_generation(
                 )
                 print("Solving SP (with placement)...")
                 sp_p_sol, sp_p_time = pricing_problem_placement(
-                    superitems_in_layer, ws, ds, W, D, tlim=tlim
+                    superitems_in_layer, ws, ds, pallet_dims, tlim=tlim
                 )
                 print("SP placement time:", sp_p_time)
                 placed = "objective" in sp_p_sol
 
                 if placed:
                     layer = build_layer_from_cp(
-                        layer_pool.superitems_pool, superitems_in_layer, sp_p_sol
+                        layer_pool.superitems_pool, superitems_in_layer, sp_p_sol, pallet_dims
                     )
                 else:
                     print("Unable to place select items, retrying")
@@ -361,14 +357,10 @@ def column_generation(
     return layer_pool, best_rmp_obj
 
 
-def build_layer_from_cp(superitems_pool, superitems_in_layer, sp_p_sol):
+def build_layer_from_cp(superitems_pool, superitems_in_layer, sp_p_sol, pallet_dims):
     spool, coords = [], []
     for s in superitems_in_layer:
         spool += [superitems_pool[s]]
         coords += [utils.Coordinate(x=sp_p_sol[f"c_{s}_x"], y=sp_p_sol[f"c_{s}_y"])]
     spool = superitems.SuperitemPool(superitems=spool)
-    return layers.Layer(
-        spool.get_max_height(),
-        spool,
-        coords,
-    )
+    return layers.Layer(spool, coords, pallet_dims)
