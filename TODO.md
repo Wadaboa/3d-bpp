@@ -6,10 +6,13 @@
   - Problema riguardo stesso Item nello stesso Layer dovuto a superitem Horizontal nei 2 assi -> (Messo in pausa, per ora risolto usando solo Vertical e Single superitems)
     - Suddividere gruppi in piu gruppi
     - Solo fra superitem con > 1 item e superitem con = 1 item
+- [ ] Warm start con maxrect calcolato su gruppi altezza
 
 ## Problemi interni al modello
 
 - [ ] Risultati inconsistenti, stesso ordine, stessa configurazione diversi risultati
+- [ ] Salvare solo layer con alpha > 0 o tutti o solo quelli dell'ultimo ciclo
+- [ ] Rivedere constraint vari modelli e provare dopo ottimizzazione anche pricing problem placement e baseline
 
 ## Problemi in Output al modello
 

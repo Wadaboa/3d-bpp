@@ -16,13 +16,39 @@ STATUS_STRING = {
 }
 
 
+def print_parameters(parameters):
+    values = dict()
+    values["RELATIVE_MIP_GAP"] = (
+        parameters.GetDoubleParam(pywraplp.MPSolverParameters.RELATIVE_MIP_GAP),
+    )
+    values["PRIMAL_TOLERANCE"] = (
+        parameters.GetDoubleParam(pywraplp.MPSolverParameters.PRIMAL_TOLERANCE),
+    )
+    values["DUAL_TOLERANCE"] = (
+        parameters.GetDoubleParam(pywraplp.MPSolverParameters.PRIMAL_TOLERANCE),
+    )
+    values["PRESOLVE"] = (parameters.GetIntegerParam(pywraplp.MPSolverParameters.PRESOLVE),)
+    values["LP_ALGORITHM"] = (parameters.GetIntegerParam(pywraplp.MPSolverParameters.LP_ALGORITHM),)
+    values["INCREMENTALITY"] = (
+        parameters.GetIntegerParam(pywraplp.MPSolverParameters.INCREMENTALITY),
+    )
+    return values
+
+
 def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
+    # Parameters
+    parameters = pywraplp.MPSolverParameters()
+    parameters.SetIntegerParam(
+        pywraplp.MPSolverParameters.LP_ALGORITHM, pywraplp.MPSolverParameters.PRIMAL
+    )
+
     # Solver
     if relaxation:
-        slv = pywraplp.Solver.CreateSolver("GLOP")
+        slv = pywraplp.Solver("RMP_relaxed_problem", pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
     else:
-        slv = pywraplp.Solver.CreateSolver("CBC")
+        slv = pywraplp.Solver("RMP_problem", pywraplp.Solver.BOP_INTEGER_PROGRAMMING)
     slv.SetNumThreads(8)
+    slv.EnableOutput()
 
     # Utility
     infinity = slv.infinity()
@@ -31,27 +57,34 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
 
     # Variables
     if relaxation:
-        al = [slv.NumVar(0, 1, f"alpha_{l}") for l in range(n_layers)]
+        al = [slv.NumVar(0, infinity, f"alpha_{l}") for l in range(n_layers)]
+        # al = [slv.NumVar(0, 1, f"alpha_{l}") for l in range(n_layers)] TODO Check if correct assumption
     else:
         al = [slv.BoolVar(f"alpha_{l}") for l in range(n_layers)]
 
+    coefficients = np.matmul(fsi.T, zsl)
+    constraints = []
     # Constraints
     for i in range(n_items):
-        slv.Add(
-            sum(fsi[s, i] * zsl[s, l] * al[l] for s in range(n_superitems) for l in range(n_layers))
-            >= 1
-        )
+        c = slv.Constraint(1, infinity, f"c_{i}")
+        # c = slv.Constraint(1, n_layers, f"c_{i}") TODO Check if correct assumption
+        for l in range(n_layers):
+            if coefficients[i, l] > 0:
+                c.SetCoefficient(al[l], float(coefficients[i, l]))
+        constraints += [c]
 
     # Objective
-    obj = sum(h * al[l] for l, h in enumerate(ol))
-    slv.Minimize(obj)
+    obj = slv.Objective()
+    for l, h in enumerate(ol):
+        obj.SetCoefficient(al[l], float(h))
+    obj.SetMinimization()
 
     # Set a time limit in milliseconds
     if tlim is not None:
-        slv.set_time_limit(1000 * tlim)
+        slv.SetTimeLimit(1000 * tlim)
 
     # Solve
-    status = slv.Solve()
+    status = slv.Solve(parameters)
 
     # Extract results
     sol, duals = None, None
@@ -59,10 +92,27 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
         sol = {f"alpha_{l}": al[l].solution_value() for l in range(n_layers)}
         sol["objective"] = slv.Objective().Value()
         if relaxation:
-            duals = np.array([c.dual_value() for c in slv.constraints()])
+            duals = np.array([c.DualValue() for c in constraints])
+
+        print("RMP var ", slv.NumVariables())
+        print("RMP constraints ", slv.NumConstraints())
+        print("RMP iterations ", slv.iterations())
+        # print(slv.ExportModelAsLpFormat(True))
 
     # Return results
     return sol, slv.WallTime() / 1000, duals
+
+
+def pricing_problem_maxrect(pallet_dims, duals, superitems_pool):
+    def superitems_duals(duals, superitem_pool):
+        sduals = [0 for i in range(len(superitem_pool))]
+        for s, superitem in enumerate(superitem_pool):
+            for id in superitem.id:
+                sduals[s] += duals[id]
+        return sduals
+
+    sduals = superitems_duals(duals, superitems_pool)
+    return maxrects.maxrects_single_layer_online(superitems_pool, pallet_dims, sduals)
 
 
 def pricing_problem_no_placement(fsi, ws, ds, hs, pallet_dims, duals, feasibility=None, tlim=None):
@@ -257,19 +307,20 @@ def column_generation(
     max_stag_iters=20,
     tlim=None,
     use_maxrect=False,
-    return_warm_start=True,
+    only_maxrect=False,
+    return_only_last=False,
 ):
-    if not return_warm_start:
-        new_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
-    fsi, from_index_to_id, from_id_to_index = layer_pool.superitems_pool.get_fsi()
+    final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
+    fsi, _, _ = layer_pool.superitems_pool.get_fsi()
     ws, ds, hs = layer_pool.superitems_pool.get_superitems_dims()
-    zsl = layer_pool.get_zsl()
-    ol = layer_pool.get_ol()
 
     n_superitems, n_items = fsi.shape
     best_rmp_obj, num_stag_iters = float("inf"), 0
     for i in range(max_iter):
+        zsl = layer_pool.get_zsl()
+        ol = layer_pool.get_ol()
         print(f"Iteration {i + 1}/{max_iter}")
+        n_layers = zsl.shape[-1]
 
         # Reduced master problem
         print("Solving RMP...")
@@ -277,9 +328,17 @@ def column_generation(
         if rmp_sol is None:
             print("Unfeasible main problem")
             break
+
+        alphas = [rmp_sol[f"alpha_{l}"] for l in range(n_layers)]
         print("RMP objective:", rmp_sol["objective"])
         print("Duals:", duals)
         print("RMP time:", rmp_time)
+        print("Alphas:", alphas)
+        if return_only_last:
+            final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
+        for l, alpha in enumerate(alphas):
+            if alpha > 0:
+                final_layer_pool.add(layer_pool[l])
 
         # Keep best RMP objective value
         if rmp_sol["objective"] < best_rmp_obj:
@@ -293,68 +352,64 @@ def column_generation(
             print("Stagnation exit :(")
             break
 
-        # Check feasibility
-        n_layers = zsl.shape[-1]
-        print("Alpha:", [rmp_sol[f"alpha_{l}"] for l in range(n_layers)])
-        if not all([rmp_sol[f"alpha_{l}"] in (0, 1) for l in range(n_layers)]):
-            print("RMP: solution not feasible (at least one alpha value is not binary)")
+        if only_maxrect:
+            print("Solving Maxrect (higher duals first)...")
+            layer = pricing_problem_maxrect(pallet_dims, duals, layer_pool.superitems_pool)
+            layer_pool.add(layer)
+        else:
+            # Check feasibility
+            print("Alpha:", [rmp_sol[f"alpha_{l}"] for l in range(n_layers)])
+            if not all([rmp_sol[f"alpha_{l}"] in (0, 1) for l in range(n_layers)]):
+                print("RMP: solution not feasible (at least one alpha value is not binary)")
 
-        # Pricing sub-problem
-        feasibility, placed = None, False
-        while not placed:
-            print("Solving SP (no placement)...")
-            sp_np_sol, sp_np_time = pricing_problem_no_placement_test(
-                fsi, ws, ds, hs, pallet_dims, duals, feasibility=feasibility, tlim=tlim
-            )
-            print("SP no placement time:", sp_np_time)
-            superitems_in_layer = [s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1]
-            print(superitems_in_layer)
-            feasibility = len(superitems_in_layer)
+            # Pricing sub-problem
+            feasibility, placed = None, False
+            while not placed:
+                print("Solving SP (no placement)...")
+                sp_np_sol, sp_np_time = pricing_problem_no_placement_test(
+                    fsi, ws, ds, hs, pallet_dims, duals, feasibility=feasibility, tlim=tlim
+                )
+                print("SP no placement time:", sp_np_time)
+                superitems_in_layer = [s for s in range(n_superitems) if sp_np_sol[f"z_{s}_l"] == 1]
+                print(superitems_in_layer)
+                feasibility = len(superitems_in_layer)
 
-            # Non-negative reduced cost
-            print("Reduced cost:", sp_np_sol["objective"])
-            if sp_np_sol["objective"] >= 0:
-                print("Reached convergence :)")
-                return layer_pool, best_rmp_obj
-            if use_maxrect:
-                placed, layer = maxrects.maxrects_single_layer(
-                    layer_pool.superitems_pool,
-                    pallet_dims,
-                    superitems_in_layer=superitems_in_layer,
-                )
-            else:
-                print(
-                    "New layer: Num selected Items:",
-                    len(superitems_in_layer),
-                    "/",
-                    n_superitems,
-                )
-                print("Solving SP (with placement)...")
-                sp_p_sol, sp_p_time = pricing_problem_placement(
-                    superitems_in_layer, ws, ds, pallet_dims, tlim=tlim
-                )
-                print("SP placement time:", sp_p_time)
-                placed = "objective" in sp_p_sol
-
-                if placed:
-                    layer = build_layer_from_cp(
-                        layer_pool.superitems_pool, superitems_in_layer, sp_p_sol, pallet_dims
+                # Non-negative reduced cost
+                print("Reduced cost:", sp_np_sol["objective"])
+                if sp_np_sol["objective"] >= 0:
+                    print("Reached convergence :)")
+                    return layer_pool, best_rmp_obj
+                if use_maxrect:
+                    placed, layer = maxrects.maxrects_single_layer(
+                        layer_pool.superitems_pool,
+                        pallet_dims,
+                        superitems_in_layer=superitems_in_layer,
                     )
                 else:
-                    print("Unable to place select items, retrying")
+                    print(
+                        "New layer: Num selected Items:",
+                        len(superitems_in_layer),
+                        "/",
+                        n_superitems,
+                    )
+                    print("Solving SP (with placement)...")
+                    sp_p_sol, sp_p_time = pricing_problem_placement(
+                        superitems_in_layer, ws, ds, pallet_dims, tlim=tlim
+                    )
+                    print("SP placement time:", sp_p_time)
+                    placed = "objective" in sp_p_sol
 
-            if placed:
-                layer_pool.add(layer)
-                if not return_warm_start:
-                    new_layer_pool.add(layer)
-                display(layer.to_dataframe())
-                zsl = layer_pool.get_zsl()
-                ol = layer_pool.get_ol()
-            else:
-                print("FEASIBILITY: ", feasibility)
-    if not return_warm_start:
-        return new_layer_pool, best_rmp_obj
-    return layer_pool, best_rmp_obj
+                    if placed:
+                        layer = build_layer_from_cp(
+                            layer_pool.superitems_pool, superitems_in_layer, sp_p_sol, pallet_dims
+                        )
+
+                if not placed:
+                    layer_pool.add(layer)
+                else:
+                    print("FEASIBILITY: ", feasibility)
+
+    return final_layer_pool, best_rmp_obj
 
 
 def build_layer_from_cp(superitems_pool, superitems_in_layer, sp_p_sol, pallet_dims):

@@ -300,7 +300,7 @@ class LayerPool:
         Sort layers in the pool by decreasing density
         """
         densities = self.get_densities(two_dims=two_dims)
-        sorted_indices = np.array(densities).argsort()[::-1]
+        sorted_indices = utils.argsort(densities, reverse=True)
         self.layers = [self.layers[i] for i in sorted_indices]
 
     def discard_by_densities(self, min_density=0.5, two_dims=False):
@@ -421,6 +421,7 @@ class LayerPool:
         """
         Perform post-processing steps to select the best layers in the pool
         """
+        print("Generated", len(self))
         new_pool = self.discard_by_densities(min_density=min_density, two_dims=two_dims)
         print("Density", len(new_pool))
         new_pool = new_pool.discard_by_coverage(max_coverage=max_coverage)

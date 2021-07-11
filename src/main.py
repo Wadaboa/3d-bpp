@@ -86,7 +86,7 @@ def column_generation_procedure(order, use_height_groups=True):
 
     for i, spool in enumerate(height_groups):
         print(f"Height group {i + 1}/{len(height_groups)}")
-
+        # TODO use height groups in warm start to work on more compact layers
         mr_layer_pool = maxrects.maxrects_multiple_layers(
             spool, config.PALLET_DIMS, add_single=True
         )
@@ -96,10 +96,12 @@ def column_generation_procedure(order, use_height_groups=True):
             mr_layer_pool,
             config.PALLET_DIMS,
             max_iter=100,
-            max_stag_iters=num_mr_layers + 1,
+            # max_stag_iters=num_mr_layers + 1,
+            max_stag_iters=20,
             tlim=5,
+            only_maxrect=True,
             use_maxrect=True,
-            return_warm_start=False,
+            return_only_last=False,
         )
         bins_lbs.append(bins_lb)
         final_layer_pool.extend(working_layer_pool)

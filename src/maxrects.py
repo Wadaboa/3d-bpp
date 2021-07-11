@@ -95,3 +95,59 @@ def maxrects_single_layer(superitems_pool, pallet_dims, superitems_in_layer=None
                 spool, [utils.Coordinate(s.x, s.y) for s in packer[0]], pallet_dims
             )
     return False, None
+
+
+def maxrects_single_layer_online(superitems_pool, pallet_dims, superitems_duals):
+    """
+    Given a superitems pool, the maximum dimensions to pack them into
+    and and values from which to pick, try to fit following the givem order,
+    the greatest number of superitems in a single layer
+    """
+    pack_algs = [MaxRectsBaf, MaxRectsBssf, MaxRectsBlsf, MaxRectsBl]
+
+    ws, ds, hs = superitems_pool.get_superitems_dims()
+    gen_layers, num_duals = [], []
+
+    indexes = utils.argsort(superitems_duals, reverse=True)
+    print("Non-Zero Duals:", sum(superitems_duals[i] > 0 for i in indexes))
+    # TODO sub-ordering of 0 duals to maximize layer density
+    for alg in pack_algs:
+
+        # Create the maxrects packing algorithm
+        packer = newPacker(
+            mode=PackingMode.Online,
+            pack_algo=alg,
+            rotation=False,
+        )
+
+        # Add one bin representing one layer
+        packer.add_bin(pallet_dims.width, pallet_dims.depth, count=1)
+
+        n_packed = 0
+        non_zero_packed = 0
+        max_height = 0
+        for i in indexes:
+            if superitems_duals[i] > 0 or max_height >= hs[i]:
+                packer.add_rect(ws[i], ds[i], i)
+                if len(packer[0]) > n_packed:
+                    n_packed = len(packer[0])
+                    if superitems_duals[i] > 0:
+                        non_zero_packed += 1
+                    if hs[i] > max_height:
+                        max_height = hs[i]
+                    # print(n_packed, max_height)
+
+        # Build layer after packing
+        spool, coords = [], []
+        for s in packer[0]:
+            spool += [superitems_pool[s.rid]]
+            coords += [utils.Coordinate(s.x, s.y)]
+        num_duals += [non_zero_packed]
+        layer = layers.Layer(superitems.SuperitemPool(spool), coords, pallet_dims)
+        gen_layers += [layer]
+
+    # Find the layer with most non-zero duals superitems placed and the most dense one and return it
+    layer_indexes = utils.argsort(
+        [(duals, layer.get_density(two_dims=False)) for duals, layer in zip(num_duals, gen_layers)],
+    )
+    return gen_layers[layer_indexes[0]]
