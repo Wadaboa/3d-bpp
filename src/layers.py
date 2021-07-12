@@ -5,7 +5,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from . import utils, superitems, maxrects
+import utils, superitems, maxrects
 
 
 class Layer:

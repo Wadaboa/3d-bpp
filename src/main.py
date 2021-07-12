@@ -1,4 +1,4 @@
-from . import layers, superitems, config, maxrects, column_generation, baseline
+import layers, superitems, config, maxrects, column_generation, baseline
 
 
 def baseline_procedure(order, tlim=None):

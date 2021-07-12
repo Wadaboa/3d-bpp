@@ -9,3 +9,5 @@ tqdm==4.60.0
 scipy==1.6.3
 seaborn==0.11.1
 nb-black==1.0.7
+streamlit==0.84.0
+watchdogs==1.8.2

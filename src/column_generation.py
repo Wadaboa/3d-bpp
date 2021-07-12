@@ -4,7 +4,7 @@ from ortools.sat.python import cp_model
 from ortools.linear_solver import pywraplp
 from tqdm import tqdm
 
-from . import layers, superitems, utils, maxrects
+import layers, superitems, utils, maxrects
 
 
 STATUS_STRING = {

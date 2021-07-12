@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 from rectpack import newPacker, PackingMode, PackingBin, SORT_AREA, SORT_SSIDE
 from rectpack.maxrects import MaxRectsBaf, MaxRectsBl, MaxRectsBlsf, MaxRectsBssf
 
-from . import utils, layers, superitems
+import utils, layers, superitems
 
 
 def maxrects_multiple_layers(superitems_pool, pallet_dims, add_single=True):

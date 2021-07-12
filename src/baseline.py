@@ -1,6 +1,6 @@
 from ortools.sat.python import cp_model
 
-from . import utils, superitems, layers
+import utils, superitems, layers
 
 
 def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):

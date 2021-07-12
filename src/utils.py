@@ -5,10 +5,6 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from rectpack import newPacker, PackingMode, PackingBin, SORT_AREA
-from rectpack.maxrects import MaxRectsBaf
-
-from . import superitems, layers
 
 
 class Dimension:

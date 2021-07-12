@@ -1,4 +1,4 @@
-from . import utils
+import utils
 
 # Container 1A (mm and kg)
 CONTAINER_WIDTH = 2330
