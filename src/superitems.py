@@ -394,7 +394,7 @@ class SuperitemPool:
         from_index_to_item_id = dict(zip(indexes, item_ids))
         from_item_id_to_index = dict(zip(item_ids, indexes))
 
-        fsi = np.zeros((len(self.superitems), self.get_num_unique_items()), dtype=int)
+        fsi = np.zeros((len(self.superitems), self.get_num_unique_items()), dtype=np.int32)
         for s, superitem in enumerate(self):
             for item_id in superitem.id:
                 fsi[s, from_item_id_to_index[item_id]] = 1

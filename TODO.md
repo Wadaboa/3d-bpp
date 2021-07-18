@@ -11,8 +11,11 @@
 ## Problemi interni al modello
 
 - [ ] Risultati inconsistenti, stesso ordine, stessa configurazione diversi risultati
-- [ ] Salvare solo layer con alpha > 0 o tutti o solo quelli dell'ultimo ciclo
-- [ ] Rivedere constraint vari modelli e provare dopo ottimizzazione anche pricing problem placement e baseline
+- [x] Salvare solo layer con alpha > 0 o tutti o solo quelli dell'ultimo ciclo
+- [x] Rivedere constraint vari modelli e provare dopo ottimizzazione anche pricing problem placement
+- [ ] Rivedere constraint baseline
+- [ ] Aggiunta feasibility check (procedurale/constraint programming/machine learning) prima del placement cp
+- [ ] Evitare duplicazione aggiunta layer in ciclo Column Generation
 
 ## Problemi in Output al modello
 
@@ -26,6 +29,7 @@
     2. Soluzione di spostamento monodirezionale iterativa dei blocchi di un layer (Da pensare per bene come alternativa a 1)
   - Spaziatura inter-layer in altezza
     1. Controllare spazi vuoti anche in altezza al termine di tutto usando una delle 2 tecnice sopradescritte
+- [ ] Riordinamento per densità alla fine di tutto
 
 ## Aggiunte eventuali
 
@@ -38,10 +42,3 @@
   - Rivedere caso piu di un layer in nuovo bin
 - Convertire oggetti in immutabili
   - "If layer in self.layers" lento -> fare come in superitems?
-- Solver e search strategy per column generation
-  - Da provare: convertire SP PLACEMENT in constraint programming (come fatto con SP NO PLACEMENT)
-  - Da provare: rimuovere SP quando si usa maxrects -> ordinare items in base ai duali e chiamare maxrects (packing effettuato su cosa ci entra nel layer)
-- Spaziatura
-- Dobbiamo passare a SP solo gli item con dual > 0?
-- Dobbiamo evitare di processare layer con alpha != 1 (anche in SP no placement)?
-- RMP lavora su tutti i layer, solo su quelli nuovi o su una parte?

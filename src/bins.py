@@ -22,6 +22,10 @@ class Bin:
         return sum(l.height for l in self.layer_pool)
 
     @property
+    def volume(self):
+        return sum(l.volume for l in self.layer_pool)
+
+    @property
     def remaining_height(self):
         """
         Return the height remaining to fill up the bin
@@ -33,6 +37,12 @@ class Bin:
         for layer in self.layer_pool[:-1]:
             heights += [heights[-1] + layer.height]
         return heights
+
+    def get_layer_densities(self, two_dims=False):
+        return self.layer_pool.get_densities(two_dims=two_dims)
+
+    def get_density(self):
+        return self.volume / self.pallet_dims.volume
 
     def _get_pallet_plot(self):
         fig = plt.figure()
@@ -194,6 +204,12 @@ class BinPool:
 
     def get_remaining_heights(self):
         return [b.remaining_height for b in self.bins]
+
+    def get_layer_densities(self, two_dims=False):
+        return [b.get_layer_densities(two_dims) for b in self.bins]
+
+    def get_bin_densities(self):
+        return [b.get_density() for b in self.bins]
 
     def plot(self):
         axs = []

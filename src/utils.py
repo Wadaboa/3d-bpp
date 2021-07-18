@@ -218,8 +218,7 @@ def get_l0_lb(order, pallet_dims):
     "The Three-Dimensional Bin Packing Problem",
     Operations Research, 1998.
     """
-    W, D, H = pallet_dims
-    return np.ceil(order.volume.sum() / (W * D * H))
+    return np.ceil(order.volume.sum() / pallet_dims.volume)
 
 
 def get_l1_lb(order, pallet_dims):
@@ -256,10 +255,15 @@ def get_l1_lb(order, pallet_dims):
 
         return len(j2[j2[d3] > (bd3 / 2)]) + max_ab
 
-    W, D, H = pallet_dims
-    l1wh = get_l1j2("width", W, "height", H, "depth", D)
-    l1wd = get_l1j2("width", W, "depth", D, "height", H)
-    l1dh = get_l1j2("depth", D, "width", W, "height", H)
+    l1wh = get_l1j2(
+        "width", pallet_dims.width, "height", pallet_dims.height, "depth", pallet_dims.depth
+    )
+    l1wd = get_l1j2(
+        "width", pallet_dims.width, "depth", pallet_dims.depth, "height", pallet_dims.height
+    )
+    l1dh = get_l1j2(
+        "depth", pallet_dims.depth, "width", pallet_dims.width, "height", pallet_dims.height
+    )
     return max(l1wh, l1wd, l1dh), l1wh, l1wd, l1dh
 
 
@@ -306,9 +310,14 @@ def get_l2_lb(order, pallet_dims):
             max_l2j2 = max(max_l2j2, l2j2)
         return max_l2j2
 
-    W, D, H = pallet_dims
     _, l1wh, l1wd, l1hd = get_l1_lb(order, pallet_dims)
-    l2wh = get_l2j2(l1wh, "width", W, "height", H, "depth", D)
-    l2wd = get_l2j2(l1wd, "width", W, "depth", D, "height", H)
-    l2dh = get_l2j2(l1hd, "depth", D, "height", H, "width", W)
+    l2wh = get_l2j2(
+        l1wh, "width", pallet_dims.width, "height", pallet_dims.height, "depth", pallet_dims.depth
+    )
+    l2wd = get_l2j2(
+        l1wd, "width", pallet_dims.width, "depth", pallet_dims.depth, "height", pallet_dims.height
+    )
+    l2dh = get_l2j2(
+        l1hd, "depth", pallet_dims.depth, "height", pallet_dims.height, "width", pallet_dims.width
+    )
     return max(l2wh, l2wd, l2dh), l2wh, l2wd, l2dh
