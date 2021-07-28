@@ -50,7 +50,8 @@ class ProductDataset:
 
     def _gen_products(self):
         """
-        Generate a sample of products
+        Generate a sample of products, by reproducing distributions
+        reported on the cited paper
         """
         # Define ratios and volumes as specified in the paper
         wh_ratios = np.random.normal(loc=0.695, scale=0.118, size=(self.num_products, 1))

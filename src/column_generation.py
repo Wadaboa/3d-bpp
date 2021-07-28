@@ -1,54 +1,64 @@
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
+from loguru import logger
 
 from ortools.sat.python import cp_model
 from ortools.linear_solver import pywraplp
-from tqdm import tqdm
 
 import layers, superitems, utils, maxrects
 
 
-STATUS_STRING = {
-    cp_model.OPTIMAL: "optimal",
-    cp_model.FEASIBLE: "feasible",
-    cp_model.INFEASIBLE: "infeasible",
-    cp_model.MODEL_INVALID: "invalid",
-    cp_model.UNKNOWN: "unknown",
+# Define 'pywraplp' solver parameters
+INTEGER_PARAMETERS = ["PRESOLVE", "LP_ALGORITHM", "INCREMENTALITY"]
+DOUBLE_PARAMETERS = ["RELATIVE_MIP_GAP", "PRIMAL_TOLERANCE", "DUAL_TOLERANCE"]
+PARAMETERS_MAPPING = {
+    "RELATIVE_MIP_GAP": pywraplp.MPSolverParameters.RELATIVE_MIP_GAP,
+    "PRIMAL_TOLERANCE": pywraplp.MPSolverParameters.PRIMAL_TOLERANCE,
+    "DUAL_TOLERANCE": pywraplp.MPSolverParameters.PRIMAL_TOLERANCE,
+    "PRESOLVE": pywraplp.MPSolverParameters.PRESOLVE,
+    "LP_ALGORITHM": pywraplp.MPSolverParameters.LP_ALGORITHM,
+    "INCREMENTALITY": pywraplp.MPSolverParameters.INCREMENTALITY,
 }
 
 
-def print_parameters(parameters):
-    values = dict()
-    values["RELATIVE_MIP_GAP"] = (
-        parameters.GetDoubleParam(pywraplp.MPSolverParameters.RELATIVE_MIP_GAP),
-    )
-    values["PRIMAL_TOLERANCE"] = (
-        parameters.GetDoubleParam(pywraplp.MPSolverParameters.PRIMAL_TOLERANCE),
-    )
-    values["DUAL_TOLERANCE"] = (
-        parameters.GetDoubleParam(pywraplp.MPSolverParameters.PRIMAL_TOLERANCE),
-    )
-    values["PRESOLVE"] = (parameters.GetIntegerParam(pywraplp.MPSolverParameters.PRESOLVE),)
-    values["LP_ALGORITHM"] = (parameters.GetIntegerParam(pywraplp.MPSolverParameters.LP_ALGORITHM),)
-    values["INCREMENTALITY"] = (
-        parameters.GetIntegerParam(pywraplp.MPSolverParameters.INCREMENTALITY),
-    )
-    return values
+def get_parameter_values(params):
+    """
+    Given a MPSolverParameters instance, return a dictionary with the values
+    associated to the each parameter (only compatible with 'pywraplp' solvers)
+    """
+    return {
+        "RELATIVE_MIP_GAP": params.GetDoubleParam(PARAMETERS_MAPPING["RELATIVE_MIP_GAP"]),
+        "PRIMAL_TOLERANCE": params.GetDoubleParam(PARAMETERS_MAPPING["PRIMAL_TOLERANCE"]),
+        "DUAL_TOLERANCE": params.GetDoubleParam(PARAMETERS_MAPPING["PRIMAL_TOLERANCE"]),
+        "PRESOLVE": params.GetIntegerParam(PARAMETERS_MAPPING["PRESOLVE"]),
+        "LP_ALGORITHM": params.GetIntegerParam(PARAMETERS_MAPPING["LP_ALGORITHM"]),
+        "INCREMENTALITY": params.GetIntegerParam(PARAMETERS_MAPPING["INCREMENTALITY"]),
+    }
+
+
+def set_parameter_values(params, assignments):
+    """
+    Given a MPSolverParameters instance and a dictionary like the following
+    {
+        'LP_ALGORITHM': pywraplp.MPSolverParameters.PRIMAL,
+        ...
+    }
+    set the parameters identified by the keys as the associated value in the dictionary
+    """
+    for k, v in assignments.items():
+        if k in INTEGER_PARAMETERS:
+            params.SetIntegerParam(PARAMETERS_MAPPING[k], v)
+        elif k in DOUBLE_PARAMETERS:
+            params.SetDoubleParam(PARAMETERS_MAPPING[k], v)
+    return params
 
 
 def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
-    # Parameters
-    parameters = pywraplp.MPSolverParameters()
-    parameters.SetIntegerParam(
-        pywraplp.MPSolverParameters.LP_ALGORITHM, pywraplp.MPSolverParameters.PRIMAL
-    )
-
     # Solver
     if relaxation:
-        slv = pywraplp.Solver("RMP_relaxed_problem", pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
+        slv = pywraplp.Solver("RMP", pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
     else:
-        slv = pywraplp.Solver("RMP_problem", pywraplp.Solver.BOP_INTEGER_PROGRAMMING)
+        slv = pywraplp.Solver("MP", pywraplp.Solver.BOP_INTEGER_PROGRAMMING)
     slv.SetNumThreads(8)
     # slv.EnableOutput()
 
@@ -87,7 +97,7 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
         slv.SetTimeLimit(1000 * tlim)
 
     # Solve
-    status = slv.Solve(parameters)
+    status = slv.Solve()
 
     # Extract results
     sol, duals = None, None
@@ -97,9 +107,11 @@ def main_problem(fsi, zsl, ol, tlim=None, relaxation=True):
         if relaxation:
             duals = np.array([c.DualValue() for c in constraints])
 
-        print("RMP var ", slv.NumVariables())
-        print("RMP constraints ", slv.NumConstraints())
-        print("RMP iterations ", slv.iterations())
+        logger.info(
+            f"RMP: solved with {slv.NumVariables()} variables, "
+            f"{slv.NumConstraints()} constraints, "
+            f"in {slv.iterations()} iterations"
+        )
         # print(slv.ExportModelAsLpFormat(True))
 
     # Return results
@@ -121,7 +133,7 @@ def pricing_problem_no_placement(pallet_dims, duals, superitems_pool, feasibilit
     sduals = superitems_duals(duals, superitems_pool)
 
     # Solver
-    slv = pywraplp.Solver("SP_no_placement_problem", pywraplp.Solver.SCIP_MIXED_INTEGER_PROGRAMMING)
+    slv = pywraplp.Solver("SP-NP", pywraplp.Solver.SCIP_MIXED_INTEGER_PROGRAMMING)
     # slv.SetNumThreads(8)
     # slv.EnableOutput()
 
@@ -151,7 +163,7 @@ def pricing_problem_no_placement(pallet_dims, duals, superitems_pool, feasibilit
 
     # Enforce feasible placement
     # sum(zsl) <= feasibility
-    print("Feasibility constraint: num selected <=", feasibility)
+    logger.info(f"SP-NP: setting number of selected items <= {feasibility}")
     f = slv.Constraint(1, feasibility, "feasibility")
     for s in range(n_superitems):
         f.SetCoefficient(zsl[s], 1)
@@ -161,7 +173,7 @@ def pricing_problem_no_placement(pallet_dims, duals, superitems_pool, feasibilit
     # ol - sum(zsl * (sduals + zero_reward))
     reward = 1 / (sduals.max() + n_superitems)
     zero_reward = np.where(duals == 0, reward, 0)
-    print("Reward about selecting superitems with duals == 0", reward)
+    logger.info(f"SP-NP: {reward} reward about selecting superitems with zero dual")
     obj = slv.Objective()
     obj.SetCoefficient(ol, 1)
     for s in range(n_superitems):
@@ -183,9 +195,11 @@ def pricing_problem_no_placement(pallet_dims, duals, superitems_pool, feasibilit
             sol[f"z_{s}_l"] = zsl[s].solution_value()
         sol["objective"] = slv.Objective().Value()
 
-    print("SP_no_placement var ", slv.NumVariables())
-    print("SP_no_placement constraints ", slv.NumConstraints())
-    print("SP_no_placement iterations ", slv.iterations())
+    logger.info(
+        f"SP-NP: solved with {slv.NumVariables()} variables, "
+        f"{slv.NumConstraints()} constraints, "
+        f"in {slv.iterations()} iterations"
+    )
     # print(slv.ExportModelAsLpFormat(False))
 
     return sol, slv.WallTime() / 1000
@@ -338,7 +352,7 @@ def pricing_problem_placement_cp(superitems_in_layer, sduals, ws, ds, pallet_dim
 def pricing_problem_placement(superitems_in_layer, ws, ds, pallet_dims, tlim=None):
 
     # Solver
-    slv = pywraplp.Solver("SP_placement_problem", pywraplp.Solver.SCIP_MIXED_INTEGER_PROGRAMMING)
+    slv = pywraplp.Solver("SP-P", pywraplp.Solver.SCIP_MIXED_INTEGER_PROGRAMMING)
     # slv.SetNumThreads(8)
     slv.EnableOutput()
 
@@ -433,9 +447,11 @@ def pricing_problem_placement(superitems_in_layer, ws, ds, pallet_dims, tlim=Non
             sol[f"c_{s}_x"] = cix[s].solution_value()
             sol[f"c_{s}_y"] = ciy[s].solution_value()
 
-    print("SP_placement var ", slv.NumVariables())
-    print("SP_placement constraints ", slv.NumConstraints())
-    print("SP_placement iterations ", slv.iterations())
+    logger.info(
+        f"SP-P: solved with {slv.NumVariables()} variables, "
+        f"{slv.NumConstraints()} constraints, "
+        f"in {slv.iterations()} iterations"
+    )
     # print(slv.ExportModelAsLpFormat(False))
 
     return sol, slv.WallTime() / 1000
@@ -569,12 +585,3 @@ def column_generation(
                     print("FEASIBILITY: ", feasibility)
 
     return final_layer_pool, best_rmp_obj
-
-
-def build_layer_from_cp(superitems_pool, superitems_in_layer, sp_p_sol, pallet_dims):
-    spool, coords = [], []
-    for s in superitems_in_layer:
-        spool += [superitems_pool[s]]
-        coords += [utils.Coordinate(x=sp_p_sol[f"c_{s}_x"], y=sp_p_sol[f"c_{s}_y"])]
-    spool = superitems.SuperitemPool(superitems=spool)
-    return layers.Layer(spool, coords, pallet_dims)

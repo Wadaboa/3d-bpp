@@ -48,6 +48,7 @@ class Dimension:
 class Coordinate:
     """
     Helper class to define a pair/triplet of coordinates
+    (defined as the bottom-left-back point of a cuboid)
     """
 
     def __init__(self, x, y, z=0):
@@ -56,6 +57,11 @@ class Coordinate:
         self.z = int(z)
 
     def from_blb_to_vertices(self, dims):
+        """
+        Convert bottom-left-back coordinates to
+        the list of all vertices in the cuboid
+        """
+        assert isinstance(dims, Dimension), "The given dimension should be an instance of Dimension"
         blb = self
         blf = Coordinate(self.x + dims.width, self.y, self.z)
         brb = Coordinate(self.x, self.y + dims.depth, self.z)
@@ -67,6 +73,9 @@ class Coordinate:
         return [blb, blf, brb, brf, tlb, tlf, trb, trf]
 
     def to_numpy(self):
+        """
+        Convert coordinates to a numpy list
+        """
         return np.array([self.x, self.y, self.z])
 
     def __eq__(self, other):
@@ -85,20 +94,34 @@ class Coordinate:
 
 
 class Vertices:
+    """
+    Helper class to define the set of vertices identifying a cuboid
+    """
+
     def __init__(self, blb, dims):
-        assert isinstance(blb, Coordinate)
-        assert isinstance(dims, Dimension)
+        assert isinstance(
+            blb, Coordinate
+        ), "The given coordinate should be an instance of Coordinate"
+        assert isinstance(dims, Dimension), "The given dimension should be an instance of Dimension"
         self.dims = dims
+
+        # Bottom left back and front
         self.blb = blb
         self.blf = Coordinate(self.blb.x + self.dims.width, self.blb.y, self.blb.z)
+
+        # Bottom right back and front
         self.brb = Coordinate(self.blb.x, self.blb.y + self.dims.depth, self.blb.z)
         self.brf = Coordinate(
             self.blb.x + self.dims.width, self.blb.y + self.dims.depth, self.blb.z
         )
+
+        # Top left back and front
         self.tlb = Coordinate(self.blb.x, self.blb.y, self.blb.z + self.dims.height)
         self.tlf = Coordinate(
             self.blb.x + self.dims.width, self.blb.y, self.blb.z + self.dims.height
         )
+
+        # Top right back and front
         self.trb = Coordinate(
             self.blb.x, self.blb.y + self.dims.depth, self.blb.z + self.dims.height
         )
@@ -107,6 +130,8 @@ class Vertices:
             self.blb.y + self.dims.depth,
             self.blb.z + self.dims.height,
         )
+
+        # List of vertices
         self.vertices = [
             self.blb,
             self.blf,
@@ -119,6 +144,9 @@ class Vertices:
         ]
 
     def get_center(self):
+        """
+        Return the central coordinate of the cuboid
+        """
         return Coordinate(
             self.blb.x + self.dims.width // 2,
             self.blb.y + self.dims.depth // 2,
@@ -126,15 +154,31 @@ class Vertices:
         )
 
     def get_xs(self):
+        """
+        Return a numpy array containing all the x-values
+        of the computed vertices
+        """
         return np.array([v.x for v in self.vertices])
 
     def get_ys(self):
+        """
+        Return a numpy array containing all the y-values
+        of the computed vertices
+        """
         return np.array([v.y for v in self.vertices])
 
     def get_zs(self):
+        """
+        Return a numpy array containing all the z-values
+        of the computed vertices
+        """
         return np.array([v.z for v in self.vertices])
 
     def to_faces(self):
+        """
+        Convert the computed set of vertices to a list of faces
+        (6 different faces for one cuboid)
+        """
         return np.array(
             [
                 [
