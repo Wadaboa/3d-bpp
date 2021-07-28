@@ -556,7 +556,7 @@ def column_generation(
                             "/",
                             n_superitems,
                         )
-                        layer = build_layer_from_cp(
+                        layer = utils.build_layer_from_model_output(
                             layer_pool.superitems_pool, superitems_in_layer, sp_p_sol, pallet_dims
                         )
                         layer.plot()

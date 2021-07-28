@@ -89,9 +89,7 @@ def baseline_procedure(
                 not_horizontal=True,
             )
         )
-        layer_pool = baseline.call_baseline_model(
-            superitems_pool, config.PALLET_DIMS, tlim=baseline_tlim
-        )
+        layer_pool = baseline.baseline(superitems_pool, config.PALLET_DIMS, tlim=baseline_tlim)
         final_layer_pool.extend(layer_pool)
 
         # Filter layers based on the given parameters

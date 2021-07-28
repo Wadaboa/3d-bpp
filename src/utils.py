@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+import superitems, layers
+
 
 class Dimension:
     """
@@ -206,6 +208,24 @@ def flatten(l):
             yield from flatten(el)
         else:
             yield el
+
+
+def build_layer_from_model_output(superitems_pool, superitems_in_layer, solution, pallet_dims):
+    """
+    Return a single layer from the given model solution (either baseline or column generation).
+    The 'solution' parameter should be a dictionary of the form
+    {
+        'c_{s}_x': ...,
+        'c_{s}_y: ...,
+        ...
+    }
+    """
+    spool, scoords = [], []
+    for s in superitems_in_layer:
+        spool += [superitems_pool[s]]
+        scoords += [Coordinate(x=solution[f"c_{s}_x"], y=solution[f"c_{s}_y"])]
+    spool = superitems.SuperitemPool(superitems=spool)
+    return layers.Layer(spool, scoords, pallet_dims)
 
 
 def get_l0_lb(order, pallet_dims):

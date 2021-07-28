@@ -1,9 +1,20 @@
 from ortools.sat.python import cp_model
+from loguru import logger
 
-import utils, superitems, layers
+import utils, layers
 
 
 def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
+    """
+    The baseline model directly assigns superitems to layers and positions
+    them by taking into account overlapment and layer height minimization.
+    It reproduces model [SPPSI] of the referenced paper (beware that it
+    might be very slow and we advice using it only for orders under 30 items).
+
+    Samir Elhedhli, Fatma Gzara, Burak Yildiz,
+    "Three-Dimensional Bin Packing and Mixed-Case Palletization",
+    INFORMS Journal on Optimization, 2019.
+    """
     # Model and solver declaration
     model = cp_model.CpModel()
     solver = cp_model.CpSolver()
@@ -13,19 +24,26 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
     max_layers = n_items
 
     # Variables
+    # Layer heights variables
     ol = {l: model.NewIntVar(0, max(hs), f"o_{l}") for l in range(max_layers)}
     zsl, cix, ciy, xsj, ysj = dict(), dict(), dict(), dict(), dict()
     for s in range(n_superitems):
+        # Coordinate variables
         cix[s] = model.NewIntVar(0, int(pallet_dims.width - ws[s]), f"c_{s}_x")
         ciy[s] = model.NewIntVar(0, int(pallet_dims.depth - ds[s]), f"c_{s}_y")
+
+        # Precedence variables
         for j in range(n_superitems):
             if j != s:
                 xsj[s, j] = model.NewBoolVar(f"x_{s}_{j}")
                 ysj[s, j] = model.NewBoolVar(f"y_{s}_{j}")
+
+        # Superitems to layer assignment variables
         for l in range(max_layers):
             zsl[s, l] = model.NewBoolVar(f"z_{s}_{l}")
 
     # Channeling variables
+    # same[s, j, l] = 1 iff superitems s and j are both in layer l
     same = dict()
     for l in range(max_layers):
         for s in range(n_superitems):
@@ -41,7 +59,10 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
     # Ensure that every item is included in exactly one layer
     for i in range(n_items):
         model.Add(
-            sum(fsi[s, i] * zsl[s, l] for s in range(n_superitems) for l in range(max_layers)) == 1
+            cp_model.LinearExpr.Sum(
+                fsi[s, i] * zsl[s, l] for s in range(n_superitems) for l in range(max_layers)
+            )
+            == 1
         )
 
     # Define the height of layer l
@@ -52,7 +73,9 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
     # Redundant valid cuts that force the area of
     # a layer to fit within the area of a bin
     model.Add(
-        sum(ws[s] * ds[s] * zsl[s, l] for l in range(max_layers) for s in range(n_superitems))
+        cp_model.LinearExpr.Sum(
+            ws[s] * ds[s] * zsl[s, l] for l in range(max_layers) for s in range(n_superitems)
+        )
         <= pallet_dims.area
     )
 
@@ -87,11 +110,11 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
                         ciy[s] + ds[s] <= ciy[j] + pallet_dims.depth * (1 - ysj[s, j])
                     ).OnlyEnforceIf([same[s, j, l]])
 
-    # Objective
-    obj = sum(ol[l] for l in range(max_layers))
+    # Minimize the sum of layer heights
+    obj = cp_model.LinearExpr.Sum(ol[l] for l in range(max_layers))
     model.Minimize(obj)
 
-    # Search strategy
+    # Search by biggest area first
     indices_by_area = utils.argsort([ws[s] * ds[s] for s in range(n_superitems)], reverse=True)
     model.AddDecisionStrategy(
         [cix[s] for s in indices_by_area],
@@ -101,10 +124,12 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
 
     # Set a time limit
     if tlim is not None:
-        solver.SetTimeLimit(1000 * tlim)
+        solver.parameters.max_time_in_seconds = tlim
 
     # Set solver parameters
     solver.parameters.num_search_workers = num_workers
+    solver.parameters.log_search_progress = True
+    solver.parameters.search_branching = cp_model.FIXED_SEARCH
 
     # Solve
     status = solver.Solve(model)
@@ -121,28 +146,36 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
             sol[f"c_{s}_y"] = solver.Value(ciy[s])
         sol["objective"] = solver.ObjectiveValue()
 
-    return sol, solver.WallTime() / 1000
+    # Return solution and solving time
+    return sol, solver.WallTime()
 
 
-def call_baseline_model(superitems_pool, pallet_dims, tlim=None, num_workers=4):
+def baseline(superitems_pool, pallet_dims, tlim=None, num_workers=4):
+    """
+    Call the baseline model with the given parameters and return
+    a layer pool
+    """
+    # Initialize model variables
     fsi, _, _ = superitems_pool.get_fsi()
+    ws, ds, hs = superitems_pool.get_superitems_dims()
     n_superitems, n_items = fsi.shape
     max_layers = n_items
-    ws, ds, hs = superitems_pool.get_superitems_dims()
+
+    # Call the baseline model
+    logger.info("Solving baseline model")
     sol, solve_time = baseline_model(
         fsi, ws, ds, hs, pallet_dims, tlim=tlim, num_workers=num_workers
     )
+    logger.info(f"Solved baseline model in {solve_time:.2f} seconds")
 
+    # Build the layer pool from the model's solution
     layer_pool = layers.LayerPool(superitems_pool, pallet_dims)
     for l in range(max_layers):
         if sol[f"o_{l}"] > 0:
             superitems_in_layer = [s for s in range(n_superitems) if sol[f"z_{s}_{l}"] == 1]
-            spool, coords = [], []
-            for s in superitems_in_layer:
-                spool += [superitems_pool[s]]
-                coords += [utils.Coordinate(x=sol[f"c_{s}_x"], y=sol[f"c_{s}_y"])]
-            spool = superitems.SuperitemPool(superitems=spool)
-            layer = layers.Layer(spool, coords, pallet_dims)
+            layer = utils.build_layer_from_model_output(
+                superitems_pool, superitems_in_layer, sol, pallet_dims
+            )
             layer_pool.add(layer)
 
     return layer_pool
