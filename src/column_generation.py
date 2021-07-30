@@ -468,6 +468,7 @@ def column_generation(
     return_only_last=False,
 ):
     final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
+    already_added_layers = set()
     fsi, _, _ = layer_pool.superitems_pool.get_fsi()
     ws, ds, hs = layer_pool.superitems_pool.get_superitems_dims()
 
@@ -493,12 +494,14 @@ def column_generation(
         print("Alphas:", alphas)
         if return_only_last:
             final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
+            already_added_layers = set()
         # Check feasibility
         if not all(alphas[l] in (0, 1) for l in range(n_layers)):
             print("RMP: solution not feasible (at least one alpha value is not binary)")
         for l, alpha in enumerate(alphas):
-            if alpha > 0:
+            if alpha > 0 and l not in already_added_layers:
                 final_layer_pool.add(layer_pool[l])
+                already_added_layers.add(l)
 
         # Keep best RMP objective value
         if rmp_sol["objective"] < best_rmp_obj:

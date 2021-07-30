@@ -14,6 +14,7 @@ dependencies:
   - seaborn==0.11.1
   - black==21.5b2
   - nb_black==1.0.7
+  - loguru==0.5.3
   - pip:
       - ortools==8.2.8710
       - rectpack==0.2.1
