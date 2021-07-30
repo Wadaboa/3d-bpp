@@ -228,19 +228,12 @@ def argsort(seq, reverse=False):
     return sorted(range(len(seq)), key=seq.__getitem__, reverse=reverse)
 
 
-def check_duplicate_keys(dicts, err_msg):
-    """
-    Assert that the input dictionaries have no common keys
-    """
-    assert not duplicate_keys(dicts), err_msg
-
-
 def duplicate_keys(dicts):
     """
     Check that the input dictionaries have common keys
     """
     keys = list(flatten([d.keys() for d in dicts]))
-    return len([k for k, v in Counter(keys).items() if v > 1]) > 0
+    return [k for k, v in Counter(keys).items() if v > 1]
 
 
 def flatten(l):

@@ -2,6 +2,7 @@ import copy
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
@@ -34,8 +35,9 @@ class Layer:
         items_coords = dict()
         for s, c in zip(self.superitems_pool, self.superitems_coords):
             coords = s.get_items_coords(width=c.x, depth=c.y, height=z)
-            if utils.duplicate_keys([items_coords, coords]):
-                print("Duplicated item in the same layer")
+            duplicates = utils.duplicate_keys([items_coords, coords])
+            if len(duplicates) > 0:
+                logger.error(f"Item repetition in the same layer, Items id:{duplicates}")
             items_coords = {**items_coords, **coords}
         return items_coords
 
@@ -47,8 +49,9 @@ class Layer:
         items_dims = dict()
         for s in self.superitems_pool:
             dims = s.get_items_dims()
-            if utils.duplicate_keys([items_dims, dims]):
-                print("Duplicated item in the same layer")
+            duplicates = utils.duplicate_keys([items_dims, dims])
+            if len(duplicates) > 0:
+                logger.error(f"Item repetition in the same layer, Items id:{duplicates}")
             items_dims = {**items_dims, **dims}
         return items_dims
 
@@ -116,7 +119,9 @@ class Layer:
         """
         Apply maxrects over superitems in layer
         """
-        placed, layer = maxrects.maxrects_single_layer(self.superitems_pool, self.pallet_dims)
+        placed, layer = maxrects.maxrects_single_layer_offline(
+            self.superitems_pool, self.pallet_dims
+        )
         return placed, layer
 
     def plot(self, ax=None, height=0):
@@ -308,6 +313,7 @@ class LayerPool:
         Sort layers by densities and keep only those with a
         density greater than or equal to the given minimum
         """
+        assert min_density >= 0.0, "Density tollerance must be non-negative"
         self.sort_by_densities(two_dims=two_dims)
         densities = self.get_densities(two_dims=two_dims)
         last_index = -1
@@ -318,10 +324,12 @@ class LayerPool:
                 break
         return self.subset(list(range(last_index + 1)))
 
-    def discard_by_coverage(self, max_coverage=3):
+    def discard_by_coverage(self, max_coverage_all=3, max_coverage_single=3):
         """
         Post-process layers by their item coverage
         """
+        assert max_coverage_all > 0, "Max number of covered items in all layers must be > 0"
+        assert max_coverage_single > 0, "Max number of covered items in a single layer must be > 0"
         all_item_ids = self.get_unique_items_ids()
         item_coverage = dict(zip(all_item_ids, [0] * len(all_item_ids)))
         layers_to_select = []
@@ -338,15 +346,15 @@ class LayerPool:
                 # If at least one item in the layer was already selected
                 # more times than the maximum allowed value, then such layer
                 # is to be discarded
-                if item_coverage[item] >= max_coverage:
+                if item_coverage[item] >= max_coverage_all:
                     to_select = False
                     break
 
-                # If at least `max_coverage` items in the layer are already covered
+                # If at least `max_multiple_coverage` items in the layer are already covered
                 # by previously selected layers, then such layer is to be discarded
                 if item_coverage[item] > 0:
                     already_covered += 1
-                if already_covered >= max_coverage:
+                if already_covered >= max_coverage_single:
                     to_select = False
                     break
 
@@ -365,6 +373,7 @@ class LayerPool:
         Keep items that are covered multiple times only
         in the layers with the highest densities
         """
+        assert min_density >= 0.0, "Density tollerance must be non-negative"
         selected_layers = copy.deepcopy(self)
         all_item_ids = selected_layers.get_unique_items_ids()
         item_coverage = dict(zip(all_item_ids, [False] * len(all_item_ids)))
@@ -395,7 +404,7 @@ class LayerPool:
                 if placed:
                     selected_layers[l] = layer
                 else:
-                    print("Couldn't rearrange layer: ", l)
+                    logger.error(f"After removing duplicated items couldn't rearrange layer: {l}")
 
         # Remove edited layers that do not respect the minimum
         # density requirement after removing at least one superitem
@@ -416,21 +425,34 @@ class LayerPool:
         return self.subset(not_empty_layers)
 
     def select_layers(
-        self, min_density=0.5, two_dims=False, max_coverage=3, remove_duplicated=True
+        self,
+        min_density=0.5,
+        two_dims=False,
+        max_coverage_all=3,
+        max_coverage_single=3,
+        remove_duplicated=True,
     ):
         """
         Perform post-processing steps to select the best layers in the pool
         """
-        print("Generated", len(self))
+        logger.info("Starting filtering of generate layers")
+        logger.debug(f"Initial layers: {len(self)}")
         new_pool = self.discard_by_densities(min_density=min_density, two_dims=two_dims)
-        print("Density", len(new_pool))
-        new_pool = new_pool.discard_by_coverage(max_coverage=max_coverage)
-        print("Coverage", len(new_pool))
+        logger.debug(f"After Discard by density: {len(new_pool)} with min density: {min_density}")
+        new_pool = new_pool.discard_by_coverage(
+            max_coverage_all=max_coverage_all, max_coverage_single=max_coverage_single
+        )
+        logger.debug(
+            f"After Discard by coverage: {len(new_pool)} with max coverage all: {max_coverage_all}, max coverage single: {max_coverage_single}"
+        )
         if remove_duplicated:
             new_pool = new_pool.remove_duplicated_items(min_density=min_density, two_dims=two_dims)
-        print("Duplicates", len(new_pool))
+        logger.debug(
+            f"After Remove duplicate items: {len(new_pool)} with min density : {min_density}"
+        )
+        # TODO remove_empty_layers is useless because the only function that can remove Superitems or Items is remove_duplicated_items which check for empty layers internally, if remove_duplicated is False than empty layers where already remove by discard by coverage
         new_pool = new_pool.remove_empty_layers()
-        print("Empty", len(new_pool))
+        logger.debug(f"After Remove empty layers: {len(new_pool)}")
         new_pool.sort_by_densities(two_dims=two_dims)
         return new_pool
 
@@ -448,6 +470,10 @@ class LayerPool:
         return item_coverage
 
     def not_covered_single_superitems(self):
+        """
+        Return a list of SingleItemSuperitem which are not covered Items
+        """
+        # TODO check comment in bins.py line 175 is this method the correct approach??
         item_coverage = self.item_coverage()
         not_covered_ids = [k for k, v in item_coverage.items() if not v]
         not_covered = set()
@@ -456,6 +482,16 @@ class LayerPool:
                 if s.id == [i]:
                     not_covered.add(s)
         return list(not_covered)
+
+    def not_covered_superitems(self):
+        """
+        Return a list of Superitem which are not covered in any Layer
+        """
+        covered_spool = superitems.SuperitemPool(superitems=None)
+        for l in self.layers:
+            covered_spool.extend(l.superitems_pool)
+
+        return [s for s in self.superitems_pool if not covered_spool.get_index(s)]
 
     def to_dataframe(self, zs=None):
         if len(self) == 0:

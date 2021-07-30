@@ -19,32 +19,50 @@ class Bin:
 
     @property
     def height(self):
+        """
+        Return the current height of the Bin
+        """
         return sum(l.height for l in self.layer_pool)
 
     @property
     def volume(self):
+        """
+        Return the volume of occupied space in the Bin
+        """
         return sum(l.volume for l in self.layer_pool)
 
     @property
     def remaining_height(self):
         """
-        Return the height remaining to fill up the bin
+        Return the height remaining to fill up the Bin
         """
         return self.pallet_dims.height - self.height
 
     def get_layer_zs(self):
+        """
+        Return a list containing the height base coordinate for each Layer in the Bin
+        """
         heights = [0]
         for layer in self.layer_pool[:-1]:
             heights += [heights[-1] + layer.height]
         return heights
 
     def get_layer_densities(self, two_dims=False):
+        """
+        Return the 2D/3D density of each Layer in the Bin
+        """
         return self.layer_pool.get_densities(two_dims=two_dims)
 
     def get_density(self):
+        """
+        Return the density of the Bin
+        """
         return self.volume / self.pallet_dims.volume
 
     def _get_pallet_plot(self):
+        """
+        Compute an initial empty 3D-plot with the pallet dimensions
+        """
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
         ax.set_xlabel("x")
@@ -58,6 +76,9 @@ class Bin:
         return ax
 
     def plot(self):
+        """
+        Return the Bin plot using the Layers representations
+        """
         height = 0
         ax = self._get_pallet_plot()
         for layer in self.layer_pool:
@@ -66,6 +87,9 @@ class Bin:
         return ax
 
     def to_dataframe(self):
+        """
+        Return a Pandas Dataframe representation of the Bin
+        """
         return self.layer_pool.to_dataframe(zs=self.get_layer_zs())
 
     def __str__(self):
@@ -80,12 +104,12 @@ class BinPool:
     A pool of bins is a collection of bins
     """
 
-    def __init__(self, layer_pool, pallet_dims, two_dims=False):
+    def __init__(self, layer_pool, pallet_dims, two_dims=False, area_tol=1.0):
         self.layer_pool = layer_pool
         self.layer_pool.sort_by_densities(two_dims=two_dims)
         self.pallet_dims = pallet_dims
         self.bins = self._build(self.layer_pool)
-        self._place_not_covered()
+        self._place_not_covered(area_tol=area_tol)
 
     def _build(self, layer_pool):
         """
@@ -146,15 +170,9 @@ class BinPool:
             Place the maximum amount of items that can fit in
             a new layer, starting from the given pool
             """
-            # TODO use Online version of maxrect to avoid 'while not placed'
-            assert len(to_place) > 0, "Cannot place empty pool"
+            assert len(to_place) > 0, "The number of Superitems to place must be > 0"
             spool = superitems.SuperitemPool(superitems=to_place)
-            placed = False
-            while not placed:
-                placed, layer = maxrects.maxrects_single_layer(spool, self.pallet_dims)
-                if not placed:
-                    min_superitem, _ = spool.get_extreme_superitem(minimum=True, two_dims=False)
-                    spool.remove(min_superitem)
+            layer = maxrects.maxrects_single_layer_online(spool, self.pallet_dims)
             return layer
 
         def _place_new_layers(superitems_list, remaining_heights):
@@ -177,8 +195,12 @@ class BinPool:
                     working_index = working_index + 1
             return superitems_list
 
-        # Sort superitems by ascending height
+        # TODO What happens when inside the layer pool there isn't the SingleItemSuperitem assosicated with a not covered Item ??
+        # Is this method correct??
+        # Shouldn't we try to place Superitems of other kinds which are composed of only not covered Items ??
         superitems_list = self.layer_pool.not_covered_single_superitems()
+
+        # Sort superitems by ascending height
         superitems_list = [
             superitems_list[i] for i in utils.argsort([s.height for s in superitems_list])
         ]
@@ -200,18 +222,34 @@ class BinPool:
             self.bins += self._build(lpool)
 
     def get_heights(self):
+        """
+        Return the height of each Bin in the BinPool
+        """
         return [b.height for b in self.bins]
 
     def get_remaining_heights(self):
+        """
+        Return the remaining height of each Bin in the BinPool,
+        which is the difference from the max height of a Bin and its current one
+        """
         return [b.remaining_height for b in self.bins]
 
     def get_layer_densities(self, two_dims=False):
+        """
+        Return the 2D/3D densities for each Layer in each Bin in a list of list form
+        """
         return [b.get_layer_densities(two_dims) for b in self.bins]
 
     def get_bin_densities(self):
+        """
+        Return the 2D/3D densities for each Layer in each Bin in a list of list form
+        """
         return [b.get_density() for b in self.bins]
 
     def plot(self):
+        """
+        Return a list of figures representing the Bins inside the BinPool
+        """
         axs = []
         for bin in self.bins:
             ax = bin.plot()
@@ -219,6 +257,9 @@ class BinPool:
         return axs
 
     def to_dataframe(self):
+        """
+        Return a Pandas Dataframes representing the Bins inside the BinPool
+        """
         dfs = []
         for i, bin in enumerate(self.bins):
             df = bin.to_dataframe()
