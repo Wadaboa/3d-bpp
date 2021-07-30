@@ -45,6 +45,9 @@ def maxrects_warm_start(superitems_pool, height_tol=0, density_tol=0.5):
     height_groups = get_height_groups(
         superitems_pool, config.PALLET_DIMS, height_tol=height_tol, density_tol=density_tol
     )
+    # If no height groups are identified fallback to one group
+    if len(height_groups) == 0:
+        height_groups = [superitems_pool]
     mr_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS)
 
     # Call maxrects for each height group and merge all the layer pools
