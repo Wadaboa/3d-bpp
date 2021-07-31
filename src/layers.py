@@ -462,9 +462,9 @@ class LayerPool:
                 density = layer.get_density(two_dims=two_dims)
                 if density < min_density or density == 0:
                     to_remove.add(l)
-
                 # Replace the original layer with the edited one
-                selected_layers.replace(l, layer)
+                else:
+                    selected_layers.replace(l, layer)
 
             # Update item coverage
             if l not in to_remove:

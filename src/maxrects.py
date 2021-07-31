@@ -145,7 +145,7 @@ def maxrects_single_layer_online(superitems_pool, pallet_dims, superitems_duals=
     # casting to np.array to be coherent with usual duals format
     if superitems_duals is None:
         superitems_duals = np.array(hs)
-    indexes = utils.argsort(zip(superitems_duals, hs), reverse=True)
+    indexes = utils.argsort(list(zip(superitems_duals, hs)), reverse=True)
     logger.debug(
         f"MR-SL-Online: Non-zero duals to place {sum(superitems_duals[i] > 0 for i in indexes)}"
     )

@@ -15,7 +15,7 @@
 - [x] Rivedere constraint vari modelli e provare dopo ottimizzazione anche pricing problem placement
 - [x] Rivedere constraint baseline (nel modello CP non si possono scrivere i constraint con "Constraint" e "SetCoefficient")
 - [ ] Aggiunta feasibility check (procedurale/constraint programming/machine learning) prima del placement cp
-- [ ] Evitare duplicazione aggiunta layer in ciclo Column Generation
+- [x] Evitare duplicazione aggiunta layer in ciclo Column Generation
 
 ## Problemi in Output al modello
 

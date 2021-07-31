@@ -75,11 +75,15 @@ def cg(
     max_iters=100,
     max_stag_iters=20,
     tlim=5,
+    sp_mr=False,
+    sp_np_type="mip",
+    sp_p_type="cp",
+    return_only_last=False,
+    enable_solver_output=False,
 ):
     """
     Generate layers by calling the column generation procedure
     """
-
     cg_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS)
 
     # Process superitems all together or by dividing them into height groups
@@ -118,13 +122,14 @@ def cg(
             max_iter=max_iters,
             max_stag_iters=max_stag_iters,
             tlim=tlim,
-            spp_mr=False,
-            spp_cp=True,
-            spp_mip=False,
-            pricing_problem_maxrect=False,
-            return_only_last=False,
+            sp_mr=sp_mr,
+            sp_np_type=sp_np_type,
+            sp_p_type=sp_p_type,
+            return_only_last=return_only_last,
+            enable_solver_output=enable_solver_output,
         )
         cg_layer_pool.extend(layer_pool)
+
     return cg_layer_pool
 
 
@@ -137,13 +142,16 @@ def main(
     filtering_max_coverage_all=3,
     filtering_max_coverage_single=3,
     tlim=None,
-    # cg and maxrects
+    enable_solver_output=False,
     height_tol=0,
-    # cg
     use_height_groups=True,
     mr_warm_start=True,
     cg_max_iters=100,
     cg_max_stag_iters=20,
+    cg_sp_mr=False,
+    cg_sp_np_type="mip",
+    cg_sp_p_type="cp",
+    cg_return_only_last=False,
 ):
     assert max_iters > 0, "The number of maximum iteration must be > 0"
     assert procedure in ("mr", "bl", "cg"), "Unsupported procedure"
@@ -186,6 +194,11 @@ def main(
                 max_iters=cg_max_iters,
                 max_stag_iters=cg_max_stag_iters,
                 tlim=tlim,
+                sp_mr=cg_sp_mr,
+                sp_np_type=cg_sp_np_type,
+                sp_p_type=cg_sp_p_type,
+                return_only_last=cg_return_only_last,
+                enable_solver_output=enable_solver_output,
             )
 
         # Filter Layers based on the given parameters
