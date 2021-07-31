@@ -66,35 +66,97 @@ def maxrects_warm_start(superitems_pool, height_tol=0, density_tol=0.5, add_sing
     return mr_layer_pool
 
 
-# TODO all the 3 following procedure are basically the same, only the core function varies,
-# create a generalization with a parameter
+def cg(
+    superitems_pool,
+    height_tol=0,
+    density_tol=0.5,
+    use_height_groups=True,
+    mr_warm_start=True,
+    max_iters=100,
+    max_stag_iters=20,
+    tlim=5,
+):
+    """
+    Generate layers by calling the column generation procedure
+    """
+
+    cg_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS)
+
+    # Process superitems all together or by dividing them into height groups
+    if use_height_groups:
+        height_groups = get_height_groups(
+            superitems_pool,
+            config.PALLET_DIMS,
+            height_tol=height_tol,
+            density_tol=density_tol,
+        )
+        # If no height groups are identified fallback to one group
+        if len(height_groups) == 0:
+            logger.debug(f"No height groups found, fallback to standard procedure")
+            height_groups = [superitems_pool]
+    else:
+        height_groups = [superitems_pool]
+
+    # Iterate over each height group (or the entire superitems pool)
+    # and call the column generation procedure for each one
+    for i, spool in enumerate(height_groups):
+        logger.info(f"Processing height group {i + 1}/{len(height_groups)}")
+
+        # Use either the warm start given by maxrects (over height groups)
+        # or a warm start comprised of one layer for each item
+        if mr_warm_start:
+            warm_start_layer_pool = maxrects_warm_start(
+                spool, height_tol=height_tol, density_tol=density_tol
+            )
+        else:
+            warm_start_layer_pool = layers.LayerPool(spool, config.PALLET_DIMS, add_single=True)
+
+        # Call the column generation procedure
+        layer_pool, _ = column_generation.column_generation(
+            warm_start_layer_pool,
+            config.PALLET_DIMS,
+            max_iter=max_iters,
+            max_stag_iters=max_stag_iters,
+            tlim=tlim,
+            spp_mr=False,
+            spp_cp=True,
+            spp_mip=False,
+            pricing_problem_maxrect=False,
+            return_only_last=False,
+        )
+        cg_layer_pool.extend(layer_pool)
+    return cg_layer_pool
 
 
-def baseline_procedure(
+def main(
     order,
+    procedure="cg",
     max_iters=1,
     density_tol=0.5,
     filtering_two_dims=False,
     filtering_max_coverage_all=3,
     filtering_max_coverage_single=3,
-    filtering_remove_duplicated=True,
-    baseline_tlim=None,
+    tlim=None,
+    # cg and maxrects
+    height_tol=0,
+    # cg
+    use_height_groups=True,
+    mr_warm_start=True,
+    cg_max_iters=100,
+    cg_max_stag_iters=20,
 ):
-    """
-    Generate layers by calling the full-on mathematical programming approach
-    (with layers)
-    """
     assert max_iters > 0, "The number of maximum iteration must be > 0"
+    assert procedure in ("mr", "bl", "cg"), "Unsupported procedure"
 
     logger.info("Starting Baseline procedure")
+
     # Create the final superitems pool and a copy of the order
     final_layer_pool = layers.LayerPool(superitems.SuperitemPool(), config.PALLET_DIMS)
     working_order = order.copy()
 
     # Iterate the specified number of times in order to reduce
     # the number of uncovered items at each iteration
-    # TODO add a relaxation in the filtering procedure based on the number of remaing items,
-    # or the increment in number of iteration is pointless
+    not_covered = []
     for iter in range(max_iters):
         logger.info(f"Baseline iteration {iter + 1}/{max_iters}")
 
@@ -107,198 +169,46 @@ def baseline_procedure(
                 not_horizontal=True,
             )
         )
-        layer_pool = baseline.baseline(superitems_pool, config.PALLET_DIMS, tlim=baseline_tlim)
 
-        # Filter Layers based on the given parameters
-        layer_pool = layer_pool.select_layers(
-            min_density=density_tol,
-            two_dims=filtering_two_dims,
-            max_coverage_all=filtering_max_coverage_all,
-            max_coverage_single=filtering_max_coverage_single,
-            remove_duplicated=filtering_remove_duplicated,
-        )
-
-        # Add only the filtered Layers
-        final_layer_pool.extend(layer_pool)
-
-        # Compute the number of uncovered Items
-        item_coverage = final_layer_pool.item_coverage()
-        not_covered = [k for k, v in item_coverage.items() if not v]
-        # Compute a new order compose of only not covered Items
-        working_order = order.iloc[not_covered].copy()
-        logger.info(f"Items not covered: {len(not_covered)}/{len(item_coverage)}")
-
-    return final_layer_pool
-
-
-def maxrects_procedure(
-    order,
-    max_iters=1,
-    height_tol=0,
-    density_tol=0.5,
-    filtering_two_dims=False,
-    filtering_max_coverage_all=3,
-    filtering_max_coverage_single=3,
-    filtering_remove_duplicated=True,
-):
-    """
-    Generate layers by calling maxrects on each height group and
-    merge everything in a single pool
-    """
-    assert max_iters > 0, "The number of maximum iteration must be > 0"
-
-    logger.info("Starting Maxrects procedure")
-    # Create the final superitems pool and a copy of the order
-    final_layer_pool = layers.LayerPool(superitems.SuperitemPool(), config.PALLET_DIMS)
-    working_order = order.copy()
-
-    # Iterate the specified number of times in order to reduce
-    # the number of uncovered items at each iteration
-    # TODO add a relaxation on the height groups min_density and
-    # in the filtering procedure based on the number of remaing items,
-    # or the increment in number of iteration is pointless
-    for iter in range(max_iters):
-        logger.info(f"Maxrects iteration {iter + 1}/{max_iters}")
-
-        # Create the superitems pool and call the maxrects procedure
-        superitems_pool = superitems.SuperitemPool(
-            superitems=superitems.SuperitemPool.gen_superitems(
-                order=working_order,
-                pallet_dims=config.PALLET_DIMS,
-                max_vstacked=4,
-                not_horizontal=True,
+        if procedure == "bl":
+            layer_pool = baseline.baseline(superitems_pool, config.PALLET_DIMS, tlim=tlim)
+        elif procedure == "mr":
+            layer_pool = maxrects_warm_start(
+                superitems_pool, height_tol=height_tol, density_tol=density_tol, add_single=False
             )
-        )
-
-        layer_pool = maxrects_warm_start(
-            superitems_pool, height_tol=height_tol, density_tol=density_tol, add_single=False
-        )
-
-        # Filter Layers based on the given parameters
-        layer_pool = layer_pool.select_layers(
-            min_density=density_tol,
-            two_dims=filtering_two_dims,
-            max_coverage_all=filtering_max_coverage_all,
-            max_coverage_single=filtering_max_coverage_single,
-            remove_duplicated=filtering_remove_duplicated,
-        )
-        logger.info(f"Number of filtered layers {len(layer_pool)}")
-
-        # Add only the filtered Layers
-        final_layer_pool.extend(layer_pool)
-
-        # Compute the number of uncovered Items
-        item_coverage = final_layer_pool.item_coverage()
-        not_covered = [k for k, v in item_coverage.items() if not v]
-        # Compute a new order compose of only not covered Items
-        working_order = order.iloc[not_covered].copy()
-        logger.info(f"Items not covered: {len(not_covered)}/{len(item_coverage)}")
-
-    logger.success(f"Final number of layers {len(final_layer_pool)}")
-    # Return the final layer pool
-    return final_layer_pool
-
-
-def column_generation_procedure(
-    order,
-    use_height_groups=True,
-    max_iters=1,
-    height_tol=0,
-    density_tol=0.5,
-    mr_warm_start=True,
-    cg_max_iters=100,
-    cg_max_stag_iters=20,
-    cg_tlim=5,
-    filtering_two_dims=False,
-    filtering_max_coverage_all=3,
-    filtering_max_coverage_single=3,
-    filtering_remove_duplicated=True,
-):
-    """
-    Generate layers by calling the column generation procedure
-    """
-    assert max_iters > 0, "The number of maximum iteration must be > 0"
-    logger.info("Starting Column generation procedure")
-    # Create the final LayerPool and a copy of the order
-    final_layer_pool = layers.LayerPool(superitems.SuperitemPool(), config.PALLET_DIMS)
-    working_order = order.copy()
-
-    # Iterate the specified number of times in order to reduce
-    # the number of uncovered items at each iteration
-    # TODO add a relaxation on the height groups min_density and
-    # in the filtering procedure based on the number of remaing items,
-    # or the increment in number of iteration is pointless
-    for iter in range(max_iters):
-        logger.info(f"CG iteration {iter + 1}/{max_iters}")
-
-        # Create the superitems pool
-        superitems_pool = superitems.SuperitemPool(
-            superitems=superitems.SuperitemPool.gen_superitems(
-                order=working_order,
-                pallet_dims=config.PALLET_DIMS,
-                max_vstacked=4,
-                not_horizontal=True,
-                only_single=True,
-            )
-        )
-
-        # Process superitems all together or by dividing them into height groups
-        if use_height_groups:
-            height_groups = get_height_groups(
-                superitems_pool, config.PALLET_DIMS, height_tol=height_tol, density_tol=density_tol
-            )
-        else:
-            height_groups = [superitems_pool]
-
-        # Iterate over each height group (or the entire superitems pool)
-        # and call the column generation procedure for each one
-        bins_lbs = []
-        for i, spool in enumerate(height_groups):
-            logger.info(f"Processing height group {i + 1}/{len(height_groups)}")
-
-            # Use either the warm start given by maxrects (over height groups)
-            # or a warm start comprised of one layer for each item
-            if mr_warm_start:
-                warm_start_layer_pool = maxrects_warm_start(
-                    spool, height_tol=height_tol, density_tol=density_tol
-                )
-            else:
-                warm_start_layer_pool = layers.LayerPool(spool, config.PALLET_DIMS, add_single=True)
-
-            # Call the column generation procedure
-            layer_pool, bins_lb = column_generation.column_generation(
-                warm_start_layer_pool,
-                config.PALLET_DIMS,
-                max_iter=cg_max_iters,
+        elif procedure == "cg":
+            layer_pool = cg(
+                superitems_pool,
+                height_tol=height_tol,
+                density_tol=density_tol,
+                use_height_groups=use_height_groups,
+                mr_warm_start=mr_warm_start,
+                max_iters=cg_max_iters,
                 max_stag_iters=cg_max_stag_iters,
-                tlim=cg_tlim,
-                spp_mr=False,
-                spp_cp=True,
-                spp_mip=False,
-                pricing_problem_maxrect=False,
-                return_only_last=False,
+                tlim=tlim,
             )
 
-            # Filter layers based on the given parameters
-            layer_pool = layer_pool.select_layers(
-                min_density=density_tol,
-                two_dims=filtering_two_dims,
-                max_coverage_all=filtering_max_coverage_all,
-                max_coverage_single=filtering_max_coverage_single,
-                remove_duplicated=filtering_remove_duplicated,
-            )
+        # Filter Layers based on the given parameters
+        layer_pool = layer_pool.filter_layers(
+            min_density=density_tol,
+            two_dims=filtering_two_dims,
+            max_coverage_all=filtering_max_coverage_all,
+            max_coverage_single=filtering_max_coverage_single,
+        )
 
-            logger.info(f"Number of filtered layers {len(layer_pool)}")
+        # Add only the filtered Layers
+        final_layer_pool.extend(layer_pool)
 
-            # Add only the filtered Layers and the Bins lower bounds
-            bins_lbs.append(bins_lb)
-            final_layer_pool.extend(layer_pool)
+        # Compute the number of uncovered Items
+        prev_not_covered = len(not_covered)
+        item_coverage = final_layer_pool.item_coverage()
+        not_covered = [k for k, v in item_coverage.items() if not v]
+        logger.info(f"Items not covered: {len(not_covered)}/{len(item_coverage)}")
+        if len(not_covered) == prev_not_covered:
+            logger.info("Stop iterating, no improvement from the previous iteration")
+            break
 
-            # Compute the number of uncovered items
-            item_coverage = layer_pool.item_coverage()
-            not_covered = [k for k, v in item_coverage.items() if not v]
-            # Compute a new order compose of only not covered Items
-            working_order = order.iloc[not_covered].copy()
-            logger.info(f"Items not covered: {len(not_covered)}/{len(item_coverage)}")
+        # Compute a new order compose of only not covered Items
+        working_order = order.iloc[not_covered].copy()
 
-    return layer_pool, bins_lbs
+    return final_layer_pool

@@ -27,6 +27,24 @@ class Layer:
     def is_empty(self):
         return len(self.superitems_pool) == 0 and len(self.superitems_coords) == 0
 
+    def subset(self, superitem_indices):
+        """
+        Return a new layer with only the given superitems
+        """
+        new_spool = self.superitems_pool.subset(superitem_indices)
+        new_scoords = [c for i, c in enumerate(self.superitems_coords) if i in superitem_indices]
+        return Layer(new_spool, new_scoords, self.pallet_dims)
+
+    def difference(self, superitem_indices):
+        """
+        Return a new layer without the given superitems
+        """
+        new_spool = self.superitems_pool.difference(superitem_indices)
+        new_scoords = [
+            c for i, c in enumerate(self.superitems_coords) if i not in superitem_indices
+        ]
+        return Layer(new_spool, new_scoords, self.pallet_dims)
+
     def get_items_coords(self, z=0):
         """
         Return a dictionary having as key the item id and as value
@@ -73,11 +91,17 @@ class Layer:
 
     def remove(self, superitem):
         """
-        Remove the given superitem from the layer
+        Return a new layer without the given superitem
         """
-        index = self.superitems_pool.get_index(superitem)
-        self.superitems_pool.remove(superitem)
-        self.superitems_coords.pop(index)
+        new_spool = superitems.SuperitemPool(
+            superitems=[s for s in self.superitems_pool if s != superitem]
+        )
+        new_scoords = [
+            c
+            for i, c in enumerate(self.superitems_coords)
+            if i != self.superitems_pool.get_index(superitem)
+        ]
+        return Layer(new_spool, new_scoords, self.pallet_dims)
 
     def get_superitems_containing_item(self, item_id):
         """
@@ -119,10 +143,7 @@ class Layer:
         """
         Apply maxrects over superitems in layer
         """
-        placed, layer = maxrects.maxrects_single_layer_offline(
-            self.superitems_pool, self.pallet_dims
-        )
-        return placed, layer
+        return maxrects.maxrects_single_layer_offline(self.superitems_pool, self.pallet_dims)
 
     def plot(self, ax=None, height=0):
         if ax == None:
@@ -198,6 +219,12 @@ class Layer:
     def __contains__(self, superitem):
         return superitem in self.superitems_pool
 
+    def __hash__(self):
+        s_hashes = [hash(s) for s in self.superitems_pool]
+        c_hashes = [hash(c) for c in self.superitems_coords]
+        strs = [f"{s_hashes[i]}/{c_hashes[i]}" for i in utils.argsort(s_hashes)]
+        return hash("-".join(strs))
+
 
 class LayerPool:
     """
@@ -208,9 +235,17 @@ class LayerPool:
         self.superitems_pool = superitems_pool
         self.pallet_dims = pallet_dims
         self.layers = layers or []
+        self.hash_to_index = self._get_hash_to_index()
 
         if add_single:
             self._add_single_layers()
+
+    def _get_hash_to_index(self):
+        """
+        Compute a mapping for all layers in the LayerPool
+        with key the hash of the Layer and value its index in the LayerPool
+        """
+        return {hash(l): i for i, l in enumerate(self.layers)}
 
     def _add_single_layers(self):
         """
@@ -232,6 +267,14 @@ class LayerPool:
         and the same superitems pool
         """
         layers = [l for i, l in enumerate(self.layers) if i in layer_indices]
+        return LayerPool(self.superitems_pool, self.pallet_dims, layers=layers)
+
+    def difference(self, layer_indices):
+        """
+        Return a new layer pool without the given subset of layers
+        and the same superitems pool
+        """
+        layers = [l for i, l in enumerate(self.layers) if i not in layer_indices]
         return LayerPool(self.superitems_pool, self.pallet_dims, layers=layers)
 
     def get_ol(self):
@@ -258,10 +301,10 @@ class LayerPool:
         Add the given Layer to the current pool
         """
         assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
-        # check_dims = layer.pallet_dims == self.pallet_dims
-        # assert check_dims, "The given layer is built on different pallet dimensions"
-        # if layer not in self.layers:
-        self.layers.append(layer)
+        l_hash = hash(layer)
+        if l_hash not in self.hash_to_index:
+            self.layers.append(layer)
+            self.hash_to_index[l_hash] = len(self.layers) - 1
 
     def extend(self, layer_pool):
         """
@@ -276,17 +319,31 @@ class LayerPool:
             self.add(layer)
         self.superitems_pool.extend(layer_pool.superitems_pool)
 
+    def remove(self, layer):
+        """
+        Remove the given Layer from the LayerPool
+        """
+        assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
+        l_hash = hash(layer)
+        if l_hash in self.hash_to_index:
+            del self.layers[self.hash_to_index[l_hash]]
+            self.hash_to_index = self._get_hash_to_index()
+
+    def replace(self, i, layer):
+        """
+        Replace layer at index i with the given layer
+        """
+        assert i in range(len(self.layers)), "Index out of bounds"
+        assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
+        del self.hash_to_index[hash(self.layers[i])]
+        self.hash_to_index[hash(layer)] = i
+        self.layers[i] = layer
+
     def pop(self, i):
         """
         Remove the layer at the given index from the pool
         """
-        self.layers.pop(i)
-
-    def add_to_superitems_pool(self, superitem):
-        self.superitems_pool.add(superitem)
-
-    def extend_superitems_pool(self, superitems_pool):
-        self.superitems_pool.extend(superitems_pool)
+        self.remove(self.layers[i])
 
     def get_unique_items_ids(self):
         """
@@ -350,7 +407,7 @@ class LayerPool:
                     to_select = False
                     break
 
-                # If at least `max_multiple_coverage` items in the layer are already covered
+                # If at least `max_coverage_single` items in the layer are already covered
                 # by previously selected layers, then such layer is to be discarded
                 if item_coverage[item] > 0:
                     already_covered += 1
@@ -373,42 +430,58 @@ class LayerPool:
         Keep items that are covered multiple times only
         in the layers with the highest densities
         """
-        assert min_density >= 0.0, "Density tollerance must be non-negative"
+        assert min_density >= 0.0, "Density tolerance must be non-negative"
         selected_layers = copy.deepcopy(self)
         all_item_ids = selected_layers.get_unique_items_ids()
         item_coverage = dict(zip(all_item_ids, [False] * len(all_item_ids)))
-        edited_layers = set()
-        to_remove = []
-        for l, layer in enumerate(selected_layers.layers):
-            # Remove duplicated superitems
-            for item in item_coverage.keys():
-                if item_coverage[item]:
-                    for s in layer.get_superitems_containing_item(item):
-                        layer.remove(s)
-                        edited_layers.add(l)
+        edited_layers, to_remove = set(), set()
+        for l in range(len(selected_layers)):
+            layer = selected_layers[l]
+            item_ids = layer.get_unique_items_ids()
+            for item in item_ids:
+                duplicated_superitems, duplicated_indices = layer.get_superitems_containing_item(
+                    item
+                )
 
-            # Flag the layer if it doesn't respect the minimum density,
-            # or update item coverage otherwise
-            density = layer.get_density(two_dims=two_dims)
-            if density < min_density or density == 0:
-                to_remove += [l]
-            else:
-                item_ids = layer.get_unique_items_ids()
+                # Remove superitems in different layers containing the same item
+                # (remove the ones in less dense layers)
+                if item_coverage[item]:
+                    edited_layers.add(l)
+                    layer = layer.difference(duplicated_indices)
+                # Remove superitems in the same layer containing the same item
+                # (remove the ones with less volume)
+                elif len(duplicated_indices) > 1:
+                    edited_layers.add(l)
+                    duplicated_volumes = [s.volume for s in duplicated_superitems]
+                    layer = layer.difference(
+                        [duplicated_indices[i] for i in utils.argsort(duplicated_volumes)[:-1]]
+                    )
+
+            if l in edited_layers:
+                # Flag the layer if it doesn't respect the minimum density,
+                density = layer.get_density(two_dims=two_dims)
+                if density < min_density or density == 0:
+                    to_remove.add(l)
+
+                # Replace the original layer with the edited one
+                selected_layers.replace(l, layer)
+
+            # Update item coverage
+            if l not in to_remove:
+                item_ids = selected_layers[l].get_unique_items_ids()
                 for item in item_ids:
                     item_coverage[item] = True
 
         # Rearrange layers in which at least one superitem was removed
         for l in edited_layers:
             if l not in to_remove:
-                placed, layer = selected_layers[l].rearrange()
-                if placed:
+                layer = selected_layers[l].rearrange()
+                if layer is not None:
                     selected_layers[l] = layer
                 else:
                     logger.error(f"After removing duplicated items couldn't rearrange layer: {l}")
 
-        # Remove edited layers that do not respect the minimum
-        # density requirement after removing at least one superitem
-        # removing layers last to first to avoid indexing errors
+        # Removing layers last to first to avoid indexing errors
         for l in sorted(to_remove, reverse=True):
             selected_layers.pop(l)
 
@@ -424,13 +497,8 @@ class LayerPool:
                 not_empty_layers.append(l)
         return self.subset(not_empty_layers)
 
-    def select_layers(
-        self,
-        min_density=0.5,
-        two_dims=False,
-        max_coverage_all=3,
-        max_coverage_single=3,
-        remove_duplicated=True,
+    def filter_layers(
+        self, min_density=0.5, two_dims=False, max_coverage_all=3, max_coverage_single=3
     ):
         """
         Perform post-processing steps to select the best layers in the pool
@@ -445,12 +513,10 @@ class LayerPool:
         logger.debug(
             f"After Discard by coverage: {len(new_pool)} with max coverage all: {max_coverage_all}, max coverage single: {max_coverage_single}"
         )
-        if remove_duplicated:
-            new_pool = new_pool.remove_duplicated_items(min_density=min_density, two_dims=two_dims)
+        new_pool = new_pool.remove_duplicated_items(min_density=min_density, two_dims=two_dims)
         logger.debug(
             f"After Remove duplicate items: {len(new_pool)} with min density : {min_density}"
         )
-        # TODO remove_empty_layers is useless because the only function that can remove Superitems or Items is remove_duplicated_items which check for empty layers internally, if remove_duplicated is False than empty layers where already remove by discard by coverage
         new_pool = new_pool.remove_empty_layers()
         logger.debug(f"After Remove empty layers: {len(new_pool)}")
         new_pool.sort_by_densities(two_dims=two_dims)
@@ -473,7 +539,6 @@ class LayerPool:
         """
         Return a list of SingleItemSuperitem which are not covered Items
         """
-        # TODO check comment in bins.py line 175 is this method the correct approach??
         item_coverage = self.item_coverage()
         not_covered_ids = [k for k, v in item_coverage.items() if not v]
         not_covered = set()

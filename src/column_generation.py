@@ -484,49 +484,49 @@ def pricing_problem_placement_mip(superitems_in_layer, ws, ds, pallet_dims, tlim
 
 def pricing_problem_placement_mr(superitems_in_layer, pallet_dims, superitems_pool):
     start = time.time()
-    placed, layer = maxrects.maxrects_single_layer_offline(
+    layer = maxrects.maxrects_single_layer_offline(
         superitems_pool,
         pallet_dims,
         superitems_in_layer=superitems_in_layer,
     )
     duration = time.time() - start
     sol = None
-    if placed:
-        sol = {"objective": placed}
+    if layer is not None:
+        sol = {"objective": True} # TODO review objective in solution
         sol["layer"] = layer
     return sol, duration
 
 
 def column_generation(
-    working_layer_pool,
+    layer_pool,
     pallet_dims,
     max_iter=100,
     max_stag_iters=20,
     tlim=None,
-    spp_mr=False,
-    spp_cp=True,
-    spp_mip=False,
+    spp_type="cp",
     pricing_problem_maxrect=False,
     return_only_last=False,
 ):
     assert max_iter > 0, "Maximum number of iterations must be > 0"
     assert max_stag_iters > 0, "Maximum number of stagnation iteration must be > 0"
-    assert (
-        spp_mr + spp_cp + spp_mip
-    ) == 1, "Only one pricing problem placement approach can be selected"
+    assert spp_type in (
+        "cp",
+        "mr",
+        "mip",
+    ), "Incompatible subproblem placement procedure"
 
     logger.info("Starting CG")
-    final_layer_pool = layers.LayerPool(working_layer_pool.superitems_pool, pallet_dims)
+    final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
     already_added_layers = set()
-    fsi, _, _ = working_layer_pool.superitems_pool.get_fsi()
-    ws, ds, hs = working_layer_pool.superitems_pool.get_superitems_dims()
+    fsi, _, _ = layer_pool.superitems_pool.get_fsi()
+    ws, ds, hs = layer_pool.superitems_pool.get_superitems_dims()
 
     n_superitems, _ = fsi.shape
     best_rmp_obj, num_stag_iters = float("inf"), 0
     # Starting CG iterations cycle
     for i in range(max_iter):
-        zsl = working_layer_pool.get_zsl()
-        ol = working_layer_pool.get_ol()
+        zsl = layer_pool.get_zsl()
+        ol = layer_pool.get_ol()
         logger.info(f"CG iteration{i+1}/{max_iter}")
         n_layers = zsl.shape[-1]
 
@@ -546,7 +546,7 @@ def column_generation(
 
         if return_only_last:
             # TODO not the best approach, see if it's possible to find a better solution to keep only last selected layers
-            final_layer_pool = layers.LayerPool(working_layer_pool.superitems_pool, pallet_dims)
+            final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
             already_added_layers = set()
 
         # Check feasibility
@@ -555,7 +555,7 @@ def column_generation(
         for l, alpha in enumerate(alphas):
             # Add to final LayerPool only Layers with alpha > 0 which weren't already selected
             if alpha > 0 and l not in already_added_layers:
-                final_layer_pool.add(working_layer_pool[l])
+                final_layer_pool.add(layer_pool[l])
                 already_added_layers.add(l)
 
         # Keep best RMP objective value
@@ -573,11 +573,11 @@ def column_generation(
         # Pricing sub-problem (SP)
         if pricing_problem_maxrect:
             # Compute all Pricing sub-problem no-placement and placement heuristically using maxrect
-            layer = pricing_problem_maxrect(pallet_dims, duals, working_layer_pool.superitems_pool)
-            working_layer_pool.add(layer)
+            layer = pricing_problem_maxrect(pallet_dims, duals, layer_pool.superitems_pool)
+            layer_pool.add(layer)
         else:
             # Divide computation of no-placement and placement
-            feasibility = len(working_layer_pool.superitems_pool)
+            feasibility = len(layer_pool.superitems_pool)
             placed = False
             while not placed and feasibility > 0:
                 # Pricing sub-problem no-placement (SP-NP)
@@ -586,7 +586,7 @@ def column_generation(
                 sp_np_sol, sp_np_time = pricing_problem_no_placement_mip(
                     pallet_dims,
                     duals,
-                    working_layer_pool.superitems_pool,
+                    layer_pool.superitems_pool,
                     feasibility=feasibility,
                     tlim=tlim,
                 )
@@ -607,7 +607,7 @@ def column_generation(
                     logger.success("Reached convergence")
                     return final_layer_pool, best_rmp_obj
 
-                sduals = superitems_duals(duals, working_layer_pool.superitems_pool)
+                sduals = superitems_duals(duals, layer_pool.superitems_pool)
                 if spp_mr:
                     """
                     SP-P MR Variant
@@ -637,14 +637,14 @@ def column_generation(
                         layer = sp_p_sol["layer"]
                     else:
                         layer = utils.build_layer_from_model_output(
-                            working_layer_pool.superitems_pool,
+                            layer_pool.superitems_pool,
                             superitems_in_layer,
                             sp_p_sol,
                             pallet_dims,
                         )
 
                 if placed:
-                    working_layer_pool.add(layer)
+                    layer_pool.add(layer)
                 else:
                     feasibility = len(superitems_in_layer) - 1
 

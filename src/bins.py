@@ -134,8 +134,8 @@ class BinPool:
 
     def _place_not_covered(self, area_tol=1.0):
         """
-        Place the remaining items either on top of existing bins
-        or in a whole new bin, if they do not fit
+        Place the remaining items (not superitems) either on top
+        of existing bins or in a whole new bin, if they do not fit
         """
 
         def _get_unplaceable_items(superitems_list, max_spare_height):
@@ -195,9 +195,8 @@ class BinPool:
                     working_index = working_index + 1
             return superitems_list
 
-        # TODO What happens when inside the layer pool there isn't the SingleItemSuperitem assosicated with a not covered Item ??
-        # Is this method correct??
-        # Shouldn't we try to place Superitems of other kinds which are composed of only not covered Items ??
+        # Get single superitems that are not yet covered
+        # (assuming that the superitems pool in the layer pool contains all single superitems)
         superitems_list = self.layer_pool.not_covered_single_superitems()
 
         # Sort superitems by ascending height

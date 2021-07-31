@@ -74,8 +74,7 @@ def maxrects_multiple_layers(superitems_pool, pallet_dims, add_single=True):
         f"Superitems placed {len(superitems_pool) - n_notcovered}/{len(superitems_pool)}\n"
         f"with 3D-densities {layer_pool.get_densities(two_dims=False)}"
     )
-    # TODO Error in maxrects_multiple_layers Items in layer repetition, see test_order.cvs, required more testing
-    # layer_pool.to_dataframe() used to proc get_items_dims and duplicate check
+
     return layer_pool
 
 
@@ -126,8 +125,9 @@ def maxrects_single_layer_offline(superitems_pool, pallet_dims, superitems_in_la
                 f"MR-SL-Online: Generated new Layer with {len(layer)} Superitems, "
                 f"with 3D-density {layer.get_density(two_dims=False)}"
             )
-            return (True, layer)
-    return False, None
+            return layer
+
+    return None
 
 
 def maxrects_single_layer_online(superitems_pool, pallet_dims, superitems_duals=None):
@@ -145,11 +145,11 @@ def maxrects_single_layer_online(superitems_pool, pallet_dims, superitems_duals=
     # casting to np.array to be coherent with usual duals format
     if superitems_duals is None:
         superitems_duals = np.array(hs)
-    indexes = utils.argsort(superitems_duals, reverse=True)
+    indexes = utils.argsort(zip(superitems_duals, hs), reverse=True)
     logger.debug(
         f"MR-SL-Online: Non-zero duals to place {sum(superitems_duals[i] > 0 for i in indexes)}"
     )
-    # TODO sub-ordering of 0 duals to maximize layer density
+
     for alg in pack_algs:
         # Create the maxrects packing algorithm
         packer = newPacker(

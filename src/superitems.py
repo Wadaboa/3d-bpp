@@ -354,6 +354,27 @@ class SuperitemPool:
         self.superitems = superitems or []
         self.hash_to_index = self._get_hash_to_index()
 
+    def _get_hash_to_index(self):
+        """
+        Compute a mapping for all superitems in the SuperitemPool
+        with key the hash of the Superitem and value its index in the SuperitemPool
+        """
+        return {hash(s): i for i, s in enumerate(self.superitems)}
+
+    def subset(self, superitems_indices):
+        """
+        Return a new superitems pool with the given subset of superitems
+        """
+        superitems = [s for i, s in enumerate(self.superitems) if i in superitems_indices]
+        return SuperitemPool(superitems=superitems)
+
+    def difference(self, superitems_indices):
+        """
+        Return a new superitems pool without the given subset of superitems
+        """
+        superitems = [s for i, s in enumerate(self.superitems) if i not in superitems_indices]
+        return SuperitemPool(superitems=superitems)
+
     def add(self, superitem):
         """
         Add the given Superitem to the current SuperitemPool
@@ -388,6 +409,12 @@ class SuperitemPool:
             del self.superitems[self.hash_to_index[s_hash]]
             self.hash_to_index = self._get_hash_to_index()
 
+    def pop(self, i):
+        """
+        Remove the superitem at the given index from the pool
+        """
+        self.remove(self.superitems[i])
+
     def get_fsi(self):
         """
         Return a binary matrix of superitems by items, s.t.
@@ -418,11 +445,12 @@ class SuperitemPool:
         """
         Return a list of Superitem containing the given Item id
         """
-        superitems = []
-        for superitem in self.superitems:
+        superitems, indices = [], []
+        for i, superitem in enumerate(self.superitems):
             if item_id in superitem.id:
                 superitems += [superitem]
-        return superitems
+                indices += [i]
+        return superitems, indices
 
     def get_single_superitems(self):
         """
@@ -486,13 +514,6 @@ class SuperitemPool:
         else return None
         """
         return self.hash_to_index.get(hash(superitem))
-
-    def _get_hash_to_index(self):
-        """
-        Compute a mapping for all superitems in the SuperitemPool
-        with key the hash of the Superitem and value its index in the SuperitemPool
-        """
-        return {hash(s): i for i, s in enumerate(self.superitems)}
 
     def to_dataframe(self):
         """
