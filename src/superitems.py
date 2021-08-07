@@ -464,8 +464,8 @@ class SuperitemPool:
 
     def get_extreme_superitem(self, minimum=False, two_dims=False):
         """
-        Return the Superitem with (minimum or maximum) (area or volume) in the SuperitemPool
-        and its index
+        Return the Superitem with minimum (or maximum) area (or volume)
+        in the SuperitemPool and its index
         """
         func = np.argmax if not minimum else np.argmin
         index = (
@@ -541,29 +541,27 @@ class SuperitemPool:
 
     @classmethod
     def gen_superitems(
-        cls, order, pallet_dims, max_vstacked=2, only_single=False, not_horizontal=False
+        cls,
+        order,
+        pallet_dims,
+        max_vstacked=2,
+        only_single=False,
+        horizontal=True,
+        horizontal_type="two-width",
     ):
         """
         Generate horizontal and vertical superitems and
         filter the ones exceeding the pallet dimensions
         """
-
         logger.info("Generating Superitems")
         items = Item.from_dataframe(order)
-        single_items_superitems = cls._gen_single_items_superitems(items)
+        superitems = cls._gen_single_items_superitems(items)
         if only_single:
-            return single_items_superitems
-        if not_horizontal:
-            superitems_vertical = cls._gen_superitems_vertical(
-                single_items_superitems, max_vstacked
-            )
-            superitems = single_items_superitems + superitems_vertical
-        else:
-            superitems_horizontal = cls._gen_superitems_horizontal(single_items_superitems)
-            superitems_vertical = cls._gen_superitems_vertical(
-                single_items_superitems + superitems_horizontal, max_vstacked
-            )
-            superitems = single_items_superitems + superitems_horizontal + superitems_vertical
+            return superitems
+        if horizontal:
+            superitems += cls._gen_superitems_horizontal(superitems, htype=horizontal_type)
+            superitems = cls._drop_singles_in_horizontal(superitems)
+        superitems += cls._gen_superitems_vertical(superitems, max_vstacked)
         superitems = cls._filter_superitems(superitems, pallet_dims)
         logger.info(f"Generated {len(superitems)} Superitems")
         return superitems
@@ -578,11 +576,18 @@ class SuperitemPool:
         return si_superitems
 
     @classmethod
-    def _gen_superitems_horizontal(cls, items):
+    def _gen_superitems_horizontal(cls, items, htype="two-width"):
         """
         Horizontally stack groups of 2 and 4 items with the same
         dimensions to form single superitems
         """
+        assert htype in (
+            "all",
+            "two-width",
+            "two-depth",
+            "four",
+        ), "Unsupported horizontal superitem type"
+
         # Get items having the exact same dimensions
         dims = [(i.width, i.depth, i.height) for i in items]
         indexes = list(range(len(dims)))
@@ -605,29 +610,50 @@ class SuperitemPool:
                 )
                 for i in range(0, len(indexes) - 3, 4)
             ]
-        hor_two_superitems = []
+
         # Generate 2-items horizontal superitems
+        two_superitems = []
         for slice in two_slices:
-            hor_two_superitems += [
-                TwoHorizontalSuperitemWidth(slice),
-                TwoHorizontalSuperitemDepth(slice),
-            ]
-        logger.debug(f"Generated {len(hor_two_superitems)} TwoHorizontalSuperitems")
+            if htype in ("all", "two-width"):
+                two_superitems += [TwoHorizontalSuperitemWidth(slice)]
+            elif htype in ("all", "two-depth"):
+                two_superitems += [TwoHorizontalSuperitemDepth(slice)]
+        logger.debug(f"Generated {len(two_superitems)} horizontal superitems with 2 items")
 
-        hor_four_superitems = []
         # Generate 4-items horizontal superitems
+        four_superitems = []
         for slice in four_slices:
-            hor_four_superitems += [FourHorizontalSuperitem(slice)]
-        logger.debug(f"Generated {len(hor_four_superitems)} FourHorizontalSuperitems")
+            if htype in ("all", "four"):
+                four_superitems += [FourHorizontalSuperitem(slice)]
+        logger.debug(f"Generated {len(four_superitems)} horizontal superitems with 4 items")
 
-        return hor_two_superitems + hor_four_superitems
+        return two_superitems + four_superitems
+
+    @classmethod
+    def _drop_singles_in_horizontal(cls, superitems):
+        """
+        Remove single item superitems that appear in at least
+        one horizontal superitem
+        """
+        to_remove = []
+        for s in superitems:
+            if isinstance(s, HorizontalSuperitem):
+                ids = s.id
+                for i, o in enumerate(superitems):
+                    if isinstance(o, SingleItemSuperitem) and o.id[0] in ids:
+                        to_remove += [i]
+
+        for i in sorted(to_remove, reverse=True):
+            superitems.pop(i)
+
+        return superitems
 
     @classmethod
     def _gen_superitems_vertical(cls, superitems, max_vstacked, tol=0.7):
         """
         Divide superitems by width-depth ratio and vertically stack each group
         """
-        assert tol >= 0.0, "Tollerance must be non-negative"
+        assert tol >= 0.0, "Tolerance must be non-negative"
         assert max_vstacked > 1, "Maximum number of stacked items must be greater than 1"
 
         def _gen_superitems_vertical_subgroup(superitems):

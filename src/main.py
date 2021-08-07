@@ -137,6 +137,9 @@ def main(
     order,
     procedure="cg",
     max_iters=1,
+    superitems_horizontal=True,
+    superitems_horizontal_type="two-width",
+    superitems_max_vstacked=4,
     density_tol=0.5,
     filtering_two_dims=False,
     filtering_max_coverage_all=3,
@@ -173,8 +176,9 @@ def main(
             superitems=superitems.SuperitemPool.gen_superitems(
                 order=working_order,
                 pallet_dims=config.PALLET_DIMS,
-                max_vstacked=4,
-                not_horizontal=True,
+                max_vstacked=superitems_max_vstacked,
+                horizontal=superitems_horizontal,
+                horizontal_type=superitems_horizontal_type,
             )
         )
 

@@ -112,11 +112,11 @@ class ProductDataset:
         ids = pd.Series(order.index, name="id")
         return pd.concat([ids, order.reset_index(drop=True)], axis=1)
 
-    def get_dummy_order(self, ordered_products):
+    def get_dummy_order(self, ordered_products, dim="height"):
         """
-        Return a dummy order with products having the same height
+        Return a dummy order with products having one equal dimension
         """
         order = self.get_order(ordered_products)
-        order["height"] = order.sample(1).height.item()
+        order[dim] = order.sample(1)[dim].item()
         order["volume"] = order.width * order.depth * order.height
         return order

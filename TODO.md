@@ -1,9 +1,11 @@
 # TODO
 
-- [ ] Riaggiungere gestione superitems
+- [ ] Rivedere superitems
+  - [x] Non usare superitems horizontal (come adesso)
+  - [x] Rimuovere oggetti che compongono il superitem horizontal dalla pool
 - [ ] Aggiunta feasibility check (procedurale/constraint programming/machine learning) prima del placement cp
 - [x] Riordinamento finale layer per densità
-- [ ] (?) Rivedere s-shaped: rivedere caso piu di un layer in nuovo bin
+- [x] (?) Rivedere s-shaped: rivedere caso piu di un layer in nuovo bin
 
 # Nice to have
 - [ ] Aggiungere gestione peso e densità

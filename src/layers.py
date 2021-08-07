@@ -415,7 +415,7 @@ class LayerPool:
                     )
 
             if l in edited_layers:
-                # Flag the layer if it doesn't respect the minimum density,
+                # Flag the layer if it doesn't respect the minimum density
                 density = layer.get_density(two_dims=two_dims)
                 if density < min_density or density == 0:
                     to_remove.add(l)
