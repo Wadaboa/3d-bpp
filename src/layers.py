@@ -3,8 +3,6 @@ import copy
 import numpy as np
 import pandas as pd
 from loguru import logger
-from matplotlib import pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 import utils, superitems, maxrects
 
@@ -146,57 +144,16 @@ class Layer:
         return maxrects.maxrects_single_layer_offline(self.superitems_pool, self.pallet_dims)
 
     def plot(self, ax=None, height=0):
-        if ax == None:
-            ax = self._get_layer_plot()
+        if ax is None:
+            ax = utils.get_pallet_plot(
+                utils.Dimension(self.pallet_dims.width, self.pallet_dims.depth, self.height)
+            )
         items_coords = self.get_items_coords(z=height)
         items_dims = self.get_items_dims()
         for item_id in items_coords.keys():
             coords = items_coords[item_id]
             dims = items_dims[item_id]
-            ax = self._plot_product(ax, item_id, coords, dims)
-        return ax
-
-    def _get_layer_plot(self):
-        """
-        Return a matplotlib plot for the layer instance
-        """
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection="3d")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_zlabel("z")
-        ax.text(0, 0, 0, "origin", size=10, zorder=1, color="k")
-        ax.view_init(azim=60)
-        ax.set_xlim3d(0, self.pallet_dims.width)
-        ax.set_ylim3d(0, self.pallet_dims.depth)
-        ax.set_zlim3d(0, self.height)
-        return ax
-
-    def _plot_product(self, ax, item_id, coords, dims):
-        """
-        Add product to given axis
-        """
-        vertices = utils.Vertices(coords, dims)
-        ax.scatter3D(vertices.get_xs(), vertices.get_ys(), vertices.get_zs())
-        ax.add_collection3d(
-            Poly3DCollection(
-                vertices.to_faces(),
-                facecolors=np.random.rand(1, 3),
-                linewidths=1,
-                edgecolors="r",
-                alpha=0.45,
-            )
-        )
-        center = vertices.get_center()
-        ax.text(
-            center.x,
-            center.y,
-            center.z,
-            item_id,
-            size=10,
-            zorder=1,
-            color="k",
-        )
+            ax = utils.plot_product(ax, item_id, coords, dims)
         return ax
 
     def __str__(self):
@@ -557,6 +514,12 @@ class LayerPool:
             covered_spool.extend(l.superitems_pool)
 
         return [s for s in self.superitems_pool if not covered_spool.get_index(s)]
+
+    def get_heights(self):
+        """
+        Return the list of layer heights in the pool
+        """
+        return [l.height for l in self.layers]
 
     def to_dataframe(self, zs=None):
         if len(self) == 0:

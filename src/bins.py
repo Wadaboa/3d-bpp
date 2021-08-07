@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
 
 import utils, superitems, maxrects
 
@@ -59,28 +58,12 @@ class Bin:
         """
         return self.volume / self.pallet_dims.volume
 
-    def _get_pallet_plot(self):
-        """
-        Compute an initial empty 3D-plot with the pallet dimensions
-        """
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection="3d")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_zlabel("z")
-        ax.text(0, 0, 0, "origin", size=10, zorder=1, color="k")
-        ax.view_init(azim=60)
-        ax.set_xlim3d(0, self.pallet_dims.width)
-        ax.set_ylim3d(0, self.pallet_dims.depth)
-        ax.set_zlim3d(0, self.pallet_dims.height)
-        return ax
-
     def plot(self):
         """
         Return the Bin plot using the Layers representations
         """
         height = 0
-        ax = self._get_pallet_plot()
+        ax = utils.get_pallet_plot(self.pallet_dims)
         for layer in self.layer_pool:
             ax = layer.plot(ax=ax, height=height)
             height += layer.height
@@ -247,7 +230,7 @@ class BinPool:
 
     def plot(self):
         """
-        Return a list of figures representing the Bins inside the BinPool
+        Return a list of figures representing bins inside the pool
         """
         axs = []
         for bin in self.bins:
@@ -257,7 +240,7 @@ class BinPool:
 
     def to_dataframe(self):
         """
-        Return a Pandas Dataframes representing the Bins inside the BinPool
+        Return a Pandas Dataframe representing bins inside the pool
         """
         dfs = []
         for i, bin in enumerate(self.bins):
@@ -284,3 +267,78 @@ class BinPool:
     def __setitem__(self, i, e):
         assert isinstance(e, Bin), "The given bin should be an instance of the Bin class"
         self.bins[i] = e
+
+
+class CompactBin:
+    """
+    A bin without the concept of layers, in which
+    items are compacted to the ground
+    """
+
+    def __init__(self, bin_df, pallet_dims):
+        self.pallet_dims = pallet_dims
+        self.df = self._gravity(bin_df)
+
+    def _gravity(self, bin_df):
+        """
+        Let items fall as low as possible without
+        intersecting with other objects
+        """
+        for l in range(1, bin_df.layer.max() + 1):
+            layer = bin_df[bin_df.layer == l]
+            for i, item in layer.iterrows():
+                items_below = bin_df[bin_df.z < item.z]
+                zs = [
+                    prev_item.z.item() + prev_item.height.item()
+                    for _, prev_item in items_below.iterrows()
+                    if utils.do_overlap(item, prev_item)
+                ]
+                new_z = max(zs) if len(zs) > 0 else 0
+                bin_df.at[i, "z"] = new_z
+        return bin_df
+
+    def plot(self):
+        """
+        Return a bin plot without the layers representation
+        """
+        ax = utils.get_pallet_plot(self.pallet_dims)
+        for _, item in self.df.iterrows():
+            ax = utils.plot_product(
+                ax,
+                item["item"],
+                utils.Coordinate(item.x, item.y, item.z),
+                utils.Dimension(item.width, item.depth, item.height),
+            )
+        return ax
+
+
+class CompactBinPool:
+    """
+    A collection of compact bins
+    """
+
+    def __init__(self, bin_pool):
+        self.compact_bins = []
+        for bin in bin_pool:
+            self.compact_bins.append(CompactBin(bin.to_dataframe(), bin_pool.pallet_dims))
+
+    def plot(self):
+        """
+        Return a list of figures representing bins inside the pool
+        """
+        axs = []
+        for bin in self.compact_bins:
+            ax = bin.plot()
+            axs.append(ax)
+        return axs
+
+    def to_dataframe(self):
+        """
+        Return a Pandas Dataframe representing bins inside the pool
+        """
+        dfs = []
+        for i, compact_bin in enumerate(self.compact_bins):
+            df = compact_bin.df
+            df["bin"] = [i] * len(df)
+            dfs += [df]
+        return pd.concat(dfs, axis=0)

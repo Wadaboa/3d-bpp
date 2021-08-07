@@ -4,6 +4,8 @@ from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from tqdm import tqdm
 
 import superitems, layers
@@ -14,7 +16,7 @@ class Dimension:
     Helper class to define object dimensions
     """
 
-    def __init__(self, width, depth, height, weight):
+    def __init__(self, width, depth, height, weight=0):
         self.width = int(width)
         self.depth = int(depth)
         self.height = int(height)
@@ -266,6 +268,64 @@ def build_layer_from_model_output(superitems_pool, superitems_in_layer, solution
         scoords += [Coordinate(x=solution[f"c_{s}_x"], y=solution[f"c_{s}_y"])]
     spool = superitems.SuperitemPool(superitems=spool)
     return layers.Layer(spool, scoords, pallet_dims)
+
+
+def do_overlap(a, b):
+    """
+    Check if the given items strictly overlap or not
+    (both items should be given as a Pandas Series)
+    """
+    assert isinstance(a, pd.Series) and isinstance(b, pd.Series), "Wrong input types"
+    dx = min(a.x.item() + a.width.item(), b.x.item() + b.width.item()) - max(a.x.item(), b.x.item())
+    dy = min(a.y.item() + a.depth.item(), b.y.item() + b.depth.item()) - max(a.y.item(), b.y.item())
+    if (dx > 0) and (dy > 0):
+        return True
+    return False
+
+
+def get_pallet_plot(pallet_dims):
+    """
+    Compute an initial empty 3D-plot with the pallet dimensions
+    """
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+    ax.text(0, 0, 0, "origin", size=10, zorder=1, color="k")
+    ax.view_init(azim=60)
+    ax.set_xlim3d(0, pallet_dims.width)
+    ax.set_ylim3d(0, pallet_dims.depth)
+    ax.set_zlim3d(0, pallet_dims.height)
+    return ax
+
+
+def plot_product(ax, item_id, coords, dims):
+    """
+    Add product to given axis
+    """
+    vertices = Vertices(coords, dims)
+    ax.scatter3D(vertices.get_xs(), vertices.get_ys(), vertices.get_zs())
+    ax.add_collection3d(
+        Poly3DCollection(
+            vertices.to_faces(),
+            facecolors=np.random.rand(1, 3),
+            linewidths=1,
+            edgecolors="r",
+            alpha=0.45,
+        )
+    )
+    center = vertices.get_center()
+    ax.text(
+        center.x,
+        center.y,
+        center.z,
+        item_id,
+        size=10,
+        zorder=1,
+        color="k",
+    )
+    return ax
 
 
 def get_l0_lb(order, pallet_dims):
