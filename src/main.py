@@ -201,7 +201,7 @@ def main(
                 enable_solver_output=enable_solver_output,
             )
 
-        # Filter Layers based on the given parameters
+        # Filter layers based on the given parameters
         layer_pool = layer_pool.filter_layers(
             min_density=density_tol,
             two_dims=filtering_two_dims,
@@ -221,7 +221,7 @@ def main(
             logger.info("Stop iterating, no improvement from the previous iteration")
             break
 
-        # Compute a new order compose of only not covered Items
+        # Compute a new order composed of only not covered items
         working_order = order.iloc[not_covered].copy()
 
     return final_layer_pool

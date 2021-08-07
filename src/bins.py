@@ -58,6 +58,12 @@ class Bin:
         """
         return self.volume / self.pallet_dims.volume
 
+    def sort_by_densities(self, two_dims=False):
+        """
+        Sort layers in the bin by decreasing density
+        """
+        self.layer_pool.sort_by_densities(two_dims=two_dims)
+
     def plot(self):
         """
         Return the Bin plot using the Layers representations
@@ -89,10 +95,17 @@ class BinPool:
 
     def __init__(self, layer_pool, pallet_dims, two_dims=False, area_tol=1.0):
         self.layer_pool = layer_pool
-        self.layer_pool.sort_by_densities(two_dims=two_dims)
         self.pallet_dims = pallet_dims
+
+        # Build the bin pool and place uncovered items on top
+        # or in a new bin
+        self.layer_pool.sort_by_densities(two_dims=two_dims)
         self.bins = self._build(self.layer_pool)
         self._place_not_covered(area_tol=area_tol)
+
+        # Sort layers in each bin by density
+        for bin in self.bins:
+            bin.sort_by_densities(two_dims=two_dims)
 
     def _build(self, layer_pool):
         """
