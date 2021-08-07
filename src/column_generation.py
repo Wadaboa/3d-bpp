@@ -1,12 +1,11 @@
 import time
 import numpy as np
-import matplotlib.pyplot as plt
 from loguru import logger
 
 from ortools.sat.python import cp_model
 from ortools.linear_solver import pywraplp
 
-import layers, superitems, utils, maxrects
+import layers, utils, maxrects
 
 
 # Define 'pywraplp' solver parameters

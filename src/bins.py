@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-import utils, superitems, maxrects
+import utils, superitems, maxrects, layers
 
 
 class Bin:
@@ -13,33 +13,39 @@ class Bin:
         self.layer_pool = layer_pool
         self.pallet_dims = pallet_dims
 
-    def add(self, layer):
-        self.layer_pool.add(layer)
-
     @property
     def height(self):
         """
-        Return the current height of the Bin
+        Return the current height of the bin
         """
         return sum(l.height for l in self.layer_pool)
 
     @property
     def volume(self):
         """
-        Return the volume of occupied space in the Bin
+        Return the volume of occupied space in the bin
         """
         return sum(l.volume for l in self.layer_pool)
 
     @property
     def remaining_height(self):
         """
-        Return the height remaining to fill up the Bin
+        Return the height remaining to fill up the bin
         """
         return self.pallet_dims.height - self.height
 
+    def add(self, layer):
+        """
+        Add the given layer to the current bin
+        """
+        assert isinstance(
+            layer, layers.Layer
+        ), "The given layer should be an instance of the Layer class"
+        self.layer_pool.add(layer)
+
     def get_layer_zs(self):
         """
-        Return a list containing the height base coordinate for each Layer in the Bin
+        Return a list containing the height base coordinate for each layer in the bin
         """
         heights = [0]
         for layer in self.layer_pool[:-1]:
@@ -48,13 +54,13 @@ class Bin:
 
     def get_layer_densities(self, two_dims=False):
         """
-        Return the 2D/3D density of each Layer in the Bin
+        Return the 2D/3D density of each layer in the bin
         """
         return self.layer_pool.get_densities(two_dims=two_dims)
 
     def get_density(self):
         """
-        Return the density of the Bin
+        Return the density of the bin
         """
         return self.volume / self.pallet_dims.volume
 
@@ -66,7 +72,8 @@ class Bin:
 
     def plot(self):
         """
-        Return the Bin plot using the Layers representations
+        Plot the curret bin by plotting each layer in the
+        bin and by stacking them vertically
         """
         height = 0
         ax = utils.get_pallet_plot(self.pallet_dims)
@@ -77,7 +84,7 @@ class Bin:
 
     def to_dataframe(self):
         """
-        Return a Pandas Dataframe representation of the Bin
+        Return a Pandas DataFrame representation of the bin
         """
         return self.layer_pool.to_dataframe(zs=self.get_layer_zs())
 
@@ -218,26 +225,26 @@ class BinPool:
 
     def get_heights(self):
         """
-        Return the height of each Bin in the BinPool
+        Return the height of each bin in the pool
         """
         return [b.height for b in self.bins]
 
     def get_remaining_heights(self):
         """
-        Return the remaining height of each Bin in the BinPool,
-        which is the difference from the max height of a Bin and its current one
+        Return the remaining height of each bin in the pool, which is
+        the difference between the maximum height of a bin and its current one
         """
         return [b.remaining_height for b in self.bins]
 
     def get_layer_densities(self, two_dims=False):
         """
-        Return the 2D/3D densities for each Layer in each Bin in a list of list form
+        Return the 2D/3D densities for each layer in each bin
         """
         return [b.get_layer_densities(two_dims) for b in self.bins]
 
     def get_bin_densities(self):
         """
-        Return the 2D/3D densities for each Layer in each Bin in a list of list form
+        Return the 2D/3D densities for each bin
         """
         return [b.get_density() for b in self.bins]
 
@@ -253,7 +260,7 @@ class BinPool:
 
     def to_dataframe(self):
         """
-        Return a Pandas Dataframe representing bins inside the pool
+        Return a Pandas DataFrame representing bins inside the pool
         """
         dfs = []
         for i, bin in enumerate(self.bins):
@@ -347,7 +354,7 @@ class CompactBinPool:
 
     def to_dataframe(self):
         """
-        Return a Pandas Dataframe representing bins inside the pool
+        Return a Pandas DataFrame representing bins inside the pool
         """
         dfs = []
         for i, compact_bin in enumerate(self.compact_bins):

@@ -8,7 +8,8 @@ def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.
     Divide the whole pool of superitems into groups having either
     the exact same height or an height within the given tolerance
     """
-    assert height_tol >= 0 and density_tol >= 0.0, "Tollerances parameters must be non-negative"
+    assert height_tol >= 0 and density_tol >= 0.0, "Tolerance parameters must be non-negative"
+
     # Get unique heights
     unique_heights = sorted(set(s.height for s in superitems_pool))
     height_sets = {
@@ -40,7 +41,7 @@ def maxrects_warm_start(superitems_pool, height_tol=0, density_tol=0.5, add_sing
     Compute the warm start layer pool from maxrects, by calling the
     maxrects procedure on each height group
     """
-    logger.info("Computing MR layers")
+    logger.info("MR computing layers")
 
     # Compute height groups and initialize initial layer pool
     height_groups = get_height_groups(
@@ -48,19 +49,19 @@ def maxrects_warm_start(superitems_pool, height_tol=0, density_tol=0.5, add_sing
     )
     # If no height groups are identified fallback to one group
     if len(height_groups) == 0:
-        logger.debug(f"No height groups found, fallback to standard procedure")
+        logger.debug(f"MR found no height groups, falling back to standard procedure")
         height_groups = [superitems_pool]
     # Initial empty layer pool
     mr_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS)
 
     # Call maxrects for each height group and merge all the layer pools
     for i, spool in enumerate(height_groups):
-        logger.info(f"Processing height group {i + 1}/{len(height_groups)}")
+        logger.info(f"MR processing height group {i + 1}/{len(height_groups)}")
         layer_pool = maxrects.maxrects_multiple_layers(
             spool, config.PALLET_DIMS, add_single=add_single
         )
         mr_layer_pool.extend(layer_pool)
-    logger.info(f"Generated {len(mr_layer_pool)} layers in MR")
+    logger.info(f"MR generated {len(mr_layer_pool)} layers")
 
     # Return the final layer pool
     return mr_layer_pool
@@ -84,6 +85,9 @@ def cg(
     """
     Generate layers by calling the column generation procedure
     """
+    logger.info("CG computing layers")
+
+    # Initialize final layer pool
     cg_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS)
 
     # Process superitems all together or by dividing them into height groups
@@ -96,7 +100,7 @@ def cg(
         )
         # If no height groups are identified fallback to one group
         if len(height_groups) == 0:
-            logger.debug(f"No height groups found, fallback to standard procedure")
+            logger.debug(f"CG found no height groups, falling back to standard procedure")
             height_groups = [superitems_pool]
     else:
         height_groups = [superitems_pool]
@@ -104,7 +108,7 @@ def cg(
     # Iterate over each height group (or the entire superitems pool)
     # and call the column generation procedure for each one
     for i, spool in enumerate(height_groups):
-        logger.info(f"Processing height group {i + 1}/{len(height_groups)}")
+        logger.info(f"CG processing height group {i + 1}/{len(height_groups)}")
 
         # Use either the warm start given by maxrects (over height groups)
         # or a warm start comprised of one layer for each item
@@ -159,7 +163,7 @@ def main(
     assert max_iters > 0, "The number of maximum iteration must be > 0"
     assert procedure in ("mr", "bl", "cg"), "Unsupported procedure"
 
-    logger.info("Starting Baseline procedure")
+    logger.info(f"{procedure.upper()} procedure starting")
 
     # Create the final superitems pool and a copy of the order
     final_layer_pool = layers.LayerPool(superitems.SuperitemPool(), config.PALLET_DIMS)
@@ -169,7 +173,7 @@ def main(
     # the number of uncovered items at each iteration
     not_covered = []
     for iter in range(max_iters):
-        logger.info(f"Baseline iteration {iter + 1}/{max_iters}")
+        logger.info(f"{procedure.upper()} iteration {iter + 1}/{max_iters}")
 
         # Create the superitems pool and call the baseline procedure
         superitems_pool = superitems.SuperitemPool(
@@ -182,6 +186,7 @@ def main(
             )
         )
 
+        # Call the right packing procedure
         if procedure == "bl":
             layer_pool = baseline.baseline(superitems_pool, config.PALLET_DIMS, tlim=tlim)
         elif procedure == "mr":

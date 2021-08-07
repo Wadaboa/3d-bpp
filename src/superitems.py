@@ -1,16 +1,16 @@
 from collections import defaultdict
-from loguru import logger
 
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from loguru import logger
 
 import utils
 
 
 class Item:
     """
-    An item is a single product
+    An item is a single product with a unique identifier
+    and a list of spatial dimensions
     """
 
     def __init__(self, id, width, depth, height, weight):
@@ -20,40 +20,59 @@ class Item:
     @classmethod
     def from_series(cls, item):
         """
-        Return an Item from a Pandas Series having the expected columns
+        Return an item from a Pandas Series representing a row of
+        the order extracted from the ProductDataset custom class
         """
         return Item(item.name, item.width, item.depth, item.height, item.weight)
 
     @classmethod
     def from_dataframe(cls, order):
         """
-        Return a list of Item objects from a Pandas DataFrame
-        having the expected columns
+        Return a list of items from a Pandas DataFrame obtained
+        as an order from the ProductDataset custom class
         """
         return [Item(i.name, i.width, i.depth, i.height, i.weight) for _, i in order.iterrows()]
 
     @property
     def width(self):
+        """
+        Return the width of the item
+        """
         return self.dimensions.width
 
     @property
     def depth(self):
+        """
+        Return the depth of the item
+        """
         return self.dimensions.depth
 
     @property
     def height(self):
+        """
+        Return the height of the item
+        """
         return self.dimensions.height
 
     @property
     def weight(self):
+        """
+        Return the weight of the item
+        """
         return self.dimensions.weight
 
     @property
     def volume(self):
+        """
+        Return the volume of the item
+        """
         return self.dimensions.volume
 
     @property
     def area(self):
+        """
+        Return the area of the item
+        """
         return self.dimensions.area
 
     def __eq__(self, other):
@@ -85,43 +104,76 @@ class Superitem:
         self.items = items
 
     def get_items_coords(self, width=0, depth=0, height=0):
+        """
+        Return a dictionary c of coordinates with one entry for each
+        item in the superitem, s.t. c[i] = (x, y, z) represents the
+        coordinates of item i relative to the superitem itself
+        """
         raise NotImplementedError()
 
     @property
     def width(self):
+        """
+        Return the width of the superitem
+        """
         raise NotImplementedError()
 
     @property
     def depth(self):
+        """
+        Return the depth of the superitem
+        """
         raise NotImplementedError()
 
     @property
     def height(self):
+        """
+        Return the height of the superitem
+        """
         raise NotImplementedError()
 
     @property
     def enclosing_volume(self):
+        """
+        Return the volume of the minimum sized rectangle
+        fully enclosing the superitem
+        """
         raise NotImplementedError()
 
     @property
     def weight(self):
+        """
+        Compute the weight of the superitem as the
+        sum of the item weights it's composed of
+        """
         return sum(i.weight for i in self.items)
 
     @property
     def volume(self):
+        """
+        Compute the volume of the superitem as the
+        sum of the item volumes it's composed of
+        """
         return sum(i.volume for i in self.items)
 
     @property
     def area(self):
+        """
+        Compute the area of the superitem as the
+        sum of the item areas it's composed of
+        """
         return sum(i.area for i in self.items)
 
     @property
     def id(self):
+        """
+        Return a sorted list of item ids contained in the superitem
+        """
         return sorted(utils.flatten([i.id for i in self.items]))
 
     def get_items(self):
         """
-        Return a list of raw items in the superitem
+        Return a list of single items in the superitem
         """
         return list(utils.flatten([i.items for i in self.items]))
 
@@ -136,7 +188,7 @@ class Superitem:
         for i in range(len(self.items)):
             dims = self.items[i].get_items_dims()
             dups = utils.duplicate_keys([all_dims, dims])
-            assert len(dups) == 0, f"Duplicated item in the same superitem, Items id:{dups}"
+            assert len(dups) == 0, f"Duplicated item in the same superitem, item ids: {dups}"
             all_dims = {**all_dims, **dims}
         return all_dims
 
@@ -239,7 +291,7 @@ class TwoHorizontalSuperitemWidth(HorizontalSuperitem):
         d1 = i1.get_items_coords(width=width, depth=depth, height=height)
         d2 = i2.get_items_coords(width=width + i1.width, depth=depth, height=height)
         dups = utils.duplicate_keys([d1, d2])
-        assert len(dups) == 0, f"Duplicated item in the same superitem, Items id:{dups}"
+        assert len(dups) == 0, f"Duplicated item in the same superitem, item ids: {dups}"
         return {**d1, **d2}
 
 
@@ -265,7 +317,7 @@ class TwoHorizontalSuperitemDepth(HorizontalSuperitem):
         d1 = i1.get_items_coords(width=width, depth=depth, height=height)
         d2 = i2.get_items_coords(width=width, depth=i1.depth + depth, height=height)
         dups = utils.duplicate_keys([d1, d2])
-        assert len(dups) == 0, f"Duplicated item in the same superitem, Items id:{dups}"
+        assert len(dups) == 0, f"Duplicated item in the same superitem, items ids: {dups}"
         return {**d1, **d2}
 
 
@@ -293,7 +345,7 @@ class FourHorizontalSuperitem(HorizontalSuperitem):
         d3 = i3.get_items_coords(width=width, depth=i1.depth + depth, height=height)
         d4 = i4.get_items_coords(width=i1.width + width, depth=i1.depth + depth, height=height)
         dups = utils.duplicate_keys([d1, d2, d3, d4])
-        assert len(dups) == 0, f"Duplicated item in the same superitem, Items id:{dups}"
+        assert len(dups) == 0, f"Duplicated item in the same superitem, item ids: {dups}"
         return {**d1, **d2, **d3, **d4}
 
 
@@ -338,7 +390,7 @@ class VerticalSuperitem(Superitem):
                 height=height,
             )
             dups = utils.duplicate_keys([all_coords, coords])
-            assert len(dups) == 0, f"Duplicated item in the same superitem, Items id:{dups}"
+            assert len(dups) == 0, f"Duplicated item in the same superitem, item ids: {dups}"
             all_coords = {**all_coords, **coords}
             height += self.items[i].height
 
@@ -356,8 +408,8 @@ class SuperitemPool:
 
     def _get_hash_to_index(self):
         """
-        Compute a mapping for all superitems in the SuperitemPool
-        with key the hash of the Superitem and value its index in the SuperitemPool
+        Compute a mapping for all superitems in the pool, with key
+        the hash of the superitem and value its index in the pool
         """
         return {hash(s): i for i, s in enumerate(self.superitems)}
 
@@ -381,7 +433,7 @@ class SuperitemPool:
         """
         assert isinstance(
             superitem, Superitem
-        ), "The given Superitem should be an instance of the Superitem class"
+        ), "The given superitem should be an instance of the Superitem class"
         s_hash = hash(superitem)
         if s_hash not in self.hash_to_index:
             self.superitems.append(superitem)
@@ -389,7 +441,7 @@ class SuperitemPool:
 
     def extend(self, superitems_pool):
         """
-        Extend the current SuperitemPool with the given one
+        Extend the current pool with the given one
         """
         assert isinstance(superitems_pool, SuperitemPool) or isinstance(
             superitems_pool, list
@@ -399,7 +451,7 @@ class SuperitemPool:
 
     def remove(self, superitem):
         """
-        Remove the given Superitem from the SuperitemPool
+        Remove the given superitem from the pool
         """
         assert isinstance(
             superitem, Superitem
@@ -434,7 +486,7 @@ class SuperitemPool:
 
     def get_superitems_dims(self):
         """
-        Return the dimensions of each Superitem in the SuperitemPool
+        Return the dimensions of each superitem in the pool
         """
         ws = [s.width for s in self.superitems]
         ds = [s.depth for s in self.superitems]
@@ -443,7 +495,7 @@ class SuperitemPool:
 
     def get_superitems_containing_item(self, item_id):
         """
-        Return a list of Superitem containing the given Item id
+        Return a list of superitems containing the given item id
         """
         superitems, indices = [], []
         for i, superitem in enumerate(self.superitems):
@@ -454,7 +506,7 @@ class SuperitemPool:
 
     def get_single_superitems(self):
         """
-        Return the list of SingleItemSuperitem in the SuperitemPool
+        Return the list of single item superitems in the pool
         """
         singles = []
         for superitem in self.superitems:
@@ -464,8 +516,8 @@ class SuperitemPool:
 
     def get_extreme_superitem(self, minimum=False, two_dims=False):
         """
-        Return the Superitem with minimum (or maximum) area (or volume)
-        in the SuperitemPool and its index
+        Return the superitem with minimum (or maximum) area
+        (or volume) in the pool, along with its index
         """
         func = np.argmax if not minimum else np.argmin
         index = (
@@ -477,32 +529,32 @@ class SuperitemPool:
 
     def get_item_ids(self):
         """
-        Return the ids of each Superitem inside the SuperitemPool,
-        where each Superitem's id is a list containing the Item ids of which its compose of
+        Return the ids of each superitem inside the pool, where each
+        id is a list made up of the item ids contained in the superitem
         """
         return [s.id for s in self.superitems]
 
     def get_unique_item_ids(self):
         """
-        Return the flattened list of ids of each Item inside the SuperitemPool
+        Return the flattened list of ids of each item inside the pool
         """
         return sorted(set(utils.flatten(self.get_item_ids())))
 
     def get_num_unique_items(self):
         """
-        Return the total number of unique items inside the SuperitemPool
+        Return the total number of unique items inside the pool
         """
         return len(self.get_unique_item_ids())
 
     def get_volume(self):
         """
-        Return the sum of the volume of the superitems in the SuperitemPool
+        Return the sum of superitems' volumes in the pool
         """
         return sum(s.volume for s in self.superitems)
 
     def get_max_height(self):
         """
-        Return the maximum height of the superitems in the SuperitemPool
+        Return the maximum height of the superitems in the pool
         """
         if len(self.superitems) == 0:
             return 0
@@ -510,14 +562,17 @@ class SuperitemPool:
 
     def get_index(self, superitem):
         """
-        Given a Superitem instance return the index of the Superitem in the SuperitemPool if present,
-        else return None
+        Return the index of the given superitem in the pool,
+        if present, otherwise return None
         """
+        assert isinstance(
+            superitem, Superitem
+        ), "The given superitem must be an instance of the Superitem class"
         return self.hash_to_index.get(hash(superitem))
 
     def to_dataframe(self):
         """
-        Convert the SuperitemPool to a DataFrame instance
+        Convert the pool to a DataFrame instance
         """
         ws, ds, hs = self.get_superitems_dims()
         ids = self.get_item_ids()
@@ -553,17 +608,20 @@ class SuperitemPool:
         Generate horizontal and vertical superitems and
         filter the ones exceeding the pallet dimensions
         """
-        logger.info("Generating Superitems")
         items = Item.from_dataframe(order)
         superitems = cls._gen_single_items_superitems(items)
         if only_single:
+            logger.info("Generating superitems with only single items")
             return superitems
         if horizontal:
+            logger.info(f"Generating horizontal superitems of type '{horizontal_type}'")
             superitems += cls._gen_superitems_horizontal(superitems, htype=horizontal_type)
             superitems = cls._drop_singles_in_horizontal(superitems)
+        logger.info(f"Generating vertical superitems with maximum stacking of {max_vstacked}")
         superitems += cls._gen_superitems_vertical(superitems, max_vstacked)
+        logger.info(f"Generated {len(superitems)} superitems")
         superitems = cls._filter_superitems(superitems, pallet_dims)
-        logger.info(f"Generated {len(superitems)} Superitems")
+        logger.info(f"Remaining superitems after filtering by pallet dimensions: {len(superitems)}")
         return superitems
 
     @classmethod
@@ -571,9 +629,9 @@ class SuperitemPool:
         """
         Generate superitems with a single item
         """
-        si_superitems = [SingleItemSuperitem([i]) for i in items]
-        logger.debug(f"Generated {len(si_superitems)} SingleItemSuperitems")
-        return si_superitems
+        superitems = [SingleItemSuperitem([i]) for i in items]
+        logger.debug(f"Generated {len(superitems)} superitems with a single item")
+        return superitems
 
     @classmethod
     def _gen_superitems_horizontal(cls, items, htype="two-width"):
@@ -635,6 +693,7 @@ class SuperitemPool:
         Remove single item superitems that appear in at least
         one horizontal superitem
         """
+        # For each horizontal superitem, collect its components
         to_remove = []
         for s in superitems:
             if isinstance(s, HorizontalSuperitem):
@@ -643,6 +702,8 @@ class SuperitemPool:
                     if isinstance(o, SingleItemSuperitem) and o.id[0] in ids:
                         to_remove += [i]
 
+        # Remove single item superitems in reverse order
+        # to avoid indexing issues
         for i in sorted(to_remove, reverse=True):
             superitems.pop(i)
 
@@ -661,7 +722,6 @@ class SuperitemPool:
             Vertically stack groups of >= 2 items or superitems with the
             same dimensions to form a taller superitem
             """
-
             # Add the "width * depth" column and sort superitems
             # in ascending order by that dimension
             wd = [s.width * s.depth for s in superitems]
@@ -685,25 +745,25 @@ class SuperitemPool:
                     if good:
                         slices += [tuple(superitems[i + j] for j in range(s))]
 
-            subgroup_vertical = []
             # Generate vertical superitems
+            subgroup_vertical = []
             for slice in slices:
                 subgroup_vertical += [VerticalSuperitem(slice)]
 
             return subgroup_vertical
 
-        wide_superitems = []
-        deep_superitems = []
+        # Generate vertical superitems based on their aspect ratio
+        wide, deep = []
         for s in superitems:
             if s.width / s.depth >= 1:
-                wide_superitems.append(s)
+                wide.append(s)
             else:
-                deep_superitems.append(s)
-        wide_vsubgroup = _gen_superitems_vertical_subgroup(wide_superitems)
-        logger.debug(f"Generated {len(wide_vsubgroup)} Wide VerticalSuperitems")
-        deep_vsubgroup = _gen_superitems_vertical_subgroup(deep_superitems)
-        logger.debug(f"Generated {len(deep_vsubgroup)} Deep VerticalSuperitems")
-        return wide_vsubgroup + deep_vsubgroup
+                deep.append(s)
+        wide_superitems = _gen_superitems_vertical_subgroup(wide)
+        logger.debug(f"Generated {len(wide_superitems)} wide vertical superitems")
+        deep_superitems = _gen_superitems_vertical_subgroup(deep)
+        logger.debug(f"Generated {len(deep_superitems)} deep vertical superitems")
+        return wide_superitems + deep_superitems
 
     @classmethod
     def _filter_superitems(cls, superitems, pallet_dims):

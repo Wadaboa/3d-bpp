@@ -20,9 +20,29 @@ class Layer:
 
     @property
     def height(self):
+        """
+        Return the height of the current layer
+        """
         return self.superitems_pool.get_max_height()
 
+    @property
+    def volume(self):
+        """
+        Return the sum of the items volumes in the layer
+        """
+        return sum(s.volume for s in self.superitems_pool)
+
+    @property
+    def area(self):
+        """
+        Return the sum of the items areas in the layer
+        """
+        return sum(s.width * s.depth for s in self.superitems_pool)
+
     def is_empty(self):
+        """
+        Return True if the current layer has no superitems, otherwise False
+        """
         return len(self.superitems_pool) == 0 and len(self.superitems_coords) == 0
 
     def subset(self, superitem_indices):
@@ -107,15 +127,33 @@ class Layer:
         """
         return self.superitems_pool.get_superitems_containing_item(item_id)
 
-    @property
-    def volume(self):
-        return sum(s.volume for s in self.superitems_pool)
+    def rearrange(self):
+        """
+        Apply maxrects over superitems in layer
+        """
+        return maxrects.maxrects_single_layer_offline(self.superitems_pool, self.pallet_dims)
 
-    @property
-    def area(self):
-        return sum(s.width * s.depth for s in self.superitems_pool)
+    def plot(self, ax=None, height=0):
+        """
+        Plot items in the current layer in the given plot or  in a new 3D plot
+        having a maximum height given by the height of the layer
+        """
+        if ax is None:
+            ax = utils.get_pallet_plot(
+                utils.Dimension(self.pallet_dims.width, self.pallet_dims.depth, self.height)
+            )
+        items_coords = self.get_items_coords(z=height)
+        items_dims = self.get_items_dims()
+        for item_id in items_coords.keys():
+            coords = items_coords[item_id]
+            dims = items_dims[item_id]
+            ax = utils.plot_product(ax, item_id, coords, dims)
+        return ax
 
     def to_dataframe(self, z=0):
+        """
+        Convert the current layer to a Pandas DataFrame
+        """
         items_coords = self.get_items_coords()
         items_dims = self.get_items_dims()
         keys = list(items_coords.keys())
@@ -136,25 +174,6 @@ class Layer:
                 "height": hs,
             }
         )
-
-    def rearrange(self):
-        """
-        Apply maxrects over superitems in layer
-        """
-        return maxrects.maxrects_single_layer_offline(self.superitems_pool, self.pallet_dims)
-
-    def plot(self, ax=None, height=0):
-        if ax is None:
-            ax = utils.get_pallet_plot(
-                utils.Dimension(self.pallet_dims.width, self.pallet_dims.depth, self.height)
-            )
-        items_coords = self.get_items_coords(z=height)
-        items_dims = self.get_items_dims()
-        for item_id in items_coords.keys():
-            coords = items_coords[item_id]
-            dims = items_dims[item_id]
-            ax = utils.plot_product(ax, item_id, coords, dims)
-        return ax
 
     def __str__(self):
         return f"Layer(height={self.height}, ids={self.superitems_pool.get_unique_item_ids()})"
@@ -199,8 +218,8 @@ class LayerPool:
 
     def _get_hash_to_index(self):
         """
-        Compute a mapping for all layers in the LayerPool
-        with key the hash of the Layer and value its index in the LayerPool
+        Compute a mapping for all layers in the pool with key the
+        hash of the layer and value its index in the pool
         """
         return {hash(l): i for i, l in enumerate(self.layers)}
 
@@ -255,7 +274,7 @@ class LayerPool:
 
     def add(self, layer):
         """
-        Add the given Layer to the current pool
+        Add the given layer to the current pool
         """
         assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
         l_hash = hash(layer)
@@ -327,7 +346,7 @@ class LayerPool:
         Sort layers by densities and keep only those with a
         density greater than or equal to the given minimum
         """
-        assert min_density >= 0.0, "Density tollerance must be non-negative"
+        assert min_density >= 0.0, "Density tolerance must be non-negative"
         self.sort_by_densities(two_dims=two_dims)
         densities = self.get_densities(two_dims=two_dims)
         last_index = -1
@@ -342,8 +361,10 @@ class LayerPool:
         """
         Post-process layers by their item coverage
         """
-        assert max_coverage_all > 0, "Max number of covered items in all layers must be > 0"
-        assert max_coverage_single > 0, "Max number of covered items in a single layer must be > 0"
+        assert max_coverage_all > 0, "Maximum number of covered items in all layers must be > 0"
+        assert (
+            max_coverage_single > 0
+        ), "Maximum number of covered items in a single layer must be > 0"
         all_item_ids = self.get_unique_items_ids()
         item_coverage = dict(zip(all_item_ids, [0] * len(all_item_ids)))
         layers_to_select = []
@@ -399,7 +420,6 @@ class LayerPool:
                 duplicated_superitems, duplicated_indices = layer.get_superitems_containing_item(
                     item
                 )
-
                 # Remove superitems in different layers containing the same item
                 # (remove the ones in less dense layers)
                 if item_coverage[item]:
@@ -436,7 +456,7 @@ class LayerPool:
                 if layer is not None:
                     selected_layers[l] = layer
                 else:
-                    logger.error(f"After removing duplicated items couldn't rearrange layer: {l}")
+                    logger.error(f"After removing duplicated items couldn't rearrange layer {l}")
 
         # Removing layers last to first to avoid indexing errors
         for l in sorted(to_remove, reverse=True):
@@ -460,22 +480,20 @@ class LayerPool:
         """
         Perform post-processing steps to select the best layers in the pool
         """
-        logger.info("Starting filtering of generate layers")
-        logger.debug(f"Initial layers: {len(self)}")
+        logger.info(f"Filtering {len(self)} generated layers")
         new_pool = self.discard_by_densities(min_density=min_density, two_dims=two_dims)
-        logger.debug(f"After Discard by density: {len(new_pool)} with min density: {min_density}")
+        logger.debug(f"Remaining {len(new_pool)} layers after discarding by {min_density} density")
         new_pool = new_pool.discard_by_coverage(
             max_coverage_all=max_coverage_all, max_coverage_single=max_coverage_single
         )
         logger.debug(
-            f"After Discard by coverage: {len(new_pool)} with max coverage all: {max_coverage_all}, max coverage single: {max_coverage_single}"
+            f"Remaining {len(new_pool)} layers after discarding by coverage "
+            f"(all: {max_coverage_all}), single: {max_coverage_single}"
         )
         new_pool = new_pool.remove_duplicated_items(min_density=min_density, two_dims=two_dims)
-        logger.debug(
-            f"After Remove duplicate items: {len(new_pool)} with min density : {min_density}"
-        )
+        logger.debug(f"Remaining {len(new_pool)} layers after removing duplicated items")
         new_pool = new_pool.remove_empty_layers()
-        logger.debug(f"After Remove empty layers: {len(new_pool)}")
+        logger.debug(f"Remaining {len(new_pool)} layers after removing the empty ones")
         new_pool.sort_by_densities(two_dims=two_dims)
         return new_pool
 
@@ -494,7 +512,7 @@ class LayerPool:
 
     def not_covered_single_superitems(self):
         """
-        Return a list of SingleItemSuperitem which are not covered Items
+        Return a list of single item superitems that are not present in the pool
         """
         item_coverage = self.item_coverage()
         not_covered_ids = [k for k, v in item_coverage.items() if not v]
@@ -507,7 +525,7 @@ class LayerPool:
 
     def not_covered_superitems(self):
         """
-        Return a list of Superitem which are not covered in any Layer
+        Return a list of superitems which are not present in any layer
         """
         covered_spool = superitems.SuperitemPool(superitems=None)
         for l in self.layers:
@@ -522,6 +540,9 @@ class LayerPool:
         return [l.height for l in self.layers]
 
     def to_dataframe(self, zs=None):
+        """
+        Convert the layer pool to a Pandas DataFrame
+        """
         if len(self) == 0:
             return pd.DataFrame()
         if zs is None:
