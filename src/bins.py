@@ -255,6 +255,7 @@ class BinPool:
         axs = []
         for bin in self.bins:
             ax = bin.plot()
+            ax.set_facecolor("xkcd:white")
             axs.append(ax)
         return axs
 

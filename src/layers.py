@@ -548,6 +548,18 @@ class LayerPool:
         """
         return [l.height for l in self.layers]
 
+    def get_areas(self):
+        """
+        Return the list of layer areas in the pool
+        """
+        return [l.area for l in self.layers]
+
+    def get_volumes(self):
+        """
+        Return the list of layer volumes in the pool
+        """
+        return [l.volume for l in self.layers]
+
     def to_dataframe(self, zs=None):
         """
         Convert the layer pool to a Pandas DataFrame
@@ -562,6 +574,36 @@ class LayerPool:
             df["layer"] = [i] * len(df)
             dfs += [df]
         return pd.concat(dfs, axis=0).reset_index(drop=True)
+
+    def describe(self):
+        """
+        Return a DataFrame with stats about the current layer pool
+        """
+        ids = list(range(len(self.layers)))
+        heights = self.get_heights()
+        areas = self.get_areas()
+        volumes = self.get_volumes()
+        densities_2d = self.get_densities(two_dims=True)
+        densities_3d = self.get_densities(two_dims=False)
+        df = pd.DataFrame(
+            zip(ids, heights, areas, volumes, densities_2d, densities_3d),
+            columns=["layer", "height", "area", "volume", "2d_density", "3d_density"],
+        )
+        total = (
+            df.agg(
+                {
+                    "height": np.sum,
+                    "area": np.sum,
+                    "volume": np.sum,
+                    "2d_density": np.mean,
+                    "3d_density": np.mean,
+                }
+            )
+            .to_frame()
+            .T
+        )
+        total["layer"] = "Total"
+        return pd.concat((df, total), axis=0).reset_index(drop=True)
 
     def __str__(self):
         return f"LayerPool(layers={self.layers})"

@@ -289,6 +289,7 @@ def get_pallet_plot(pallet_dims):
     """
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
+    ax.set_facecolor("xkcd:white")
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_zlabel("z")
