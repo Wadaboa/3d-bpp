@@ -488,7 +488,7 @@ class LayerPool:
         )
         logger.debug(
             f"Remaining {len(new_pool)} layers after discarding by coverage "
-            f"(all: {max_coverage_all}), single: {max_coverage_single}"
+            f"(all: {max_coverage_all}, single: {max_coverage_single})"
         )
         new_pool = new_pool.remove_duplicated_items(min_density=min_density, two_dims=two_dims)
         logger.debug(f"Remaining {len(new_pool)} layers after removing duplicated items")
@@ -510,10 +510,11 @@ class LayerPool:
                 item_coverage[item] = True
         return item_coverage
 
-    def not_covered_single_superitems(self):
+    def not_covered_single_superitems(self, singles_removed=None):
         """
         Return a list of single item superitems that are not present in the pool
         """
+        # Get items not covered in the layer pool
         item_coverage = self.item_coverage()
         not_covered_ids = [k for k, v in item_coverage.items() if not v]
         not_covered = set()
@@ -521,6 +522,14 @@ class LayerPool:
             for i in not_covered_ids:
                 if s.id == [i]:
                     not_covered.add(s)
+
+        # Add not covered single items that were removed due to
+        # layer filtering of horizontal superitems
+        singles_removed = singles_removed or []
+        for s in singles_removed:
+            if s.id[0] not in item_coverage:
+                not_covered.add(s)
+
         return list(not_covered)
 
     def not_covered_superitems(self):

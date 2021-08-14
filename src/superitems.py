@@ -608,21 +608,22 @@ class SuperitemPool:
         Generate horizontal and vertical superitems and
         filter the ones exceeding the pallet dimensions
         """
+        singles_removed = []
         items = Item.from_dataframe(order)
         superitems = cls._gen_single_items_superitems(items)
         if only_single:
             logger.info("Generating superitems with only single items")
-            return superitems
+            return superitems, singles_removed
         if horizontal:
             logger.info(f"Generating horizontal superitems of type '{horizontal_type}'")
             superitems += cls._gen_superitems_horizontal(superitems, htype=horizontal_type)
-            superitems = cls._drop_singles_in_horizontal(superitems)
+            superitems, singles_removed = cls._drop_singles_in_horizontal(superitems)
         logger.info(f"Generating vertical superitems with maximum stacking of {max_vstacked}")
         superitems += cls._gen_superitems_vertical(superitems, max_vstacked)
         logger.info(f"Generated {len(superitems)} superitems")
         superitems = cls._filter_superitems(superitems, pallet_dims)
         logger.info(f"Remaining superitems after filtering by pallet dimensions: {len(superitems)}")
-        return superitems
+        return superitems, singles_removed
 
     @classmethod
     def _gen_single_items_superitems(cls, items):
@@ -694,20 +695,21 @@ class SuperitemPool:
         one horizontal superitem
         """
         # For each horizontal superitem, collect its components
-        to_remove = []
+        to_remove, removed = [], []
         for s in superitems:
             if isinstance(s, HorizontalSuperitem):
                 ids = s.id
                 for i, o in enumerate(superitems):
                     if isinstance(o, SingleItemSuperitem) and o.id[0] in ids:
                         to_remove += [i]
+                        removed += [o]
 
         # Remove single item superitems in reverse order
         # to avoid indexing issues
         for i in sorted(to_remove, reverse=True):
             superitems.pop(i)
 
-        return superitems
+        return superitems, removed
 
     @classmethod
     def _gen_superitems_vertical(cls, superitems, max_vstacked, tol=0.7):
@@ -753,7 +755,7 @@ class SuperitemPool:
             return subgroup_vertical
 
         # Generate vertical superitems based on their aspect ratio
-        wide, deep = []
+        wide, deep = [], []
         for s in superitems:
             if s.width / s.depth >= 1:
                 wide.append(s)

@@ -1,6 +1,6 @@
 from loguru import logger
 
-import layers, superitems, config, maxrects, column_generation, baseline
+import layers, superitems, config, maxrects, column_generation, baseline, bins
 
 
 def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.5):
@@ -171,20 +171,20 @@ def main(
 
     # Iterate the specified number of times in order to reduce
     # the number of uncovered items at each iteration
-    not_covered = []
+    not_covered, all_singles_removed = [], []
     for iter in range(max_iters):
         logger.info(f"{procedure.upper()} iteration {iter + 1}/{max_iters}")
 
         # Create the superitems pool and call the baseline procedure
-        superitems_pool = superitems.SuperitemPool(
-            superitems=superitems.SuperitemPool.gen_superitems(
-                order=working_order,
-                pallet_dims=config.PALLET_DIMS,
-                max_vstacked=superitems_max_vstacked,
-                horizontal=superitems_horizontal,
-                horizontal_type=superitems_horizontal_type,
-            )
+        superitems_list, singles_removed = superitems.SuperitemPool.gen_superitems(
+            order=working_order,
+            pallet_dims=config.PALLET_DIMS,
+            max_vstacked=superitems_max_vstacked,
+            horizontal=superitems_horizontal,
+            horizontal_type=superitems_horizontal_type,
         )
+        superitems_pool = superitems.SuperitemPool(superitems=superitems_list)
+        all_singles_removed += singles_removed
 
         # Call the right packing procedure
         if procedure == "bl":
@@ -218,7 +218,7 @@ def main(
             max_coverage_single=filtering_max_coverage_single,
         )
 
-        # Add only the filtered Layers
+        # Add only the filtered layers
         final_layer_pool.extend(layer_pool)
 
         # Compute the number of uncovered Items
@@ -233,4 +233,9 @@ def main(
         # Compute a new order composed of only not covered items
         working_order = order.iloc[not_covered].copy()
 
-    return final_layer_pool
+    # Build a pool of bins from the layer pool and compact
+    # all layers in each bin to avoid having "flying" products
+    bin_pool = bins.BinPool(
+        final_layer_pool, config.PALLET_DIMS, singles_removed=all_singles_removed
+    )
+    return bins.CompactBinPool(bin_pool)

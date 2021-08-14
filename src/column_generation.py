@@ -155,7 +155,6 @@ def pricing_problem_maxrects(superitems_pool, pallet_dims, duals):
     to place superitems by biggest duals first
     """
     start = time.time()
-    # TODO Generalize Pricing problem structure and returns such that we can have an objective value of the maxrect generated layer and be able to check for convergence
     logger.info("SP-MR starting computation")
     sduals = superitems_duals(superitems_pool, duals)
     layer = maxrects.maxrects_single_layer_online(superitems_pool, pallet_dims, sduals)

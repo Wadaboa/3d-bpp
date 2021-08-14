@@ -100,7 +100,7 @@ class BinPool:
     A pool of bins is a collection of bins
     """
 
-    def __init__(self, layer_pool, pallet_dims, two_dims=False, area_tol=1.0):
+    def __init__(self, layer_pool, pallet_dims, singles_removed=None, two_dims=False, area_tol=1.0):
         self.layer_pool = layer_pool
         self.pallet_dims = pallet_dims
 
@@ -108,7 +108,7 @@ class BinPool:
         # or in a new bin
         self.layer_pool.sort_by_densities(two_dims=two_dims)
         self.bins = self._build(self.layer_pool)
-        self._place_not_covered(area_tol=area_tol)
+        self._place_not_covered(singles_removed=singles_removed, area_tol=area_tol)
 
         # Sort layers in each bin by density
         for bin in self.bins:
@@ -135,7 +135,7 @@ class BinPool:
 
         return bins
 
-    def _place_not_covered(self, area_tol=1.0):
+    def _place_not_covered(self, singles_removed=None, area_tol=1.0):
         """
         Place the remaining items (not superitems) either on top
         of existing bins or in a whole new bin, if they do not fit
@@ -173,7 +173,7 @@ class BinPool:
             Place the maximum amount of items that can fit in
             a new layer, starting from the given pool
             """
-            assert len(to_place) > 0, "The number of Superitems to place must be > 0"
+            assert len(to_place) > 0, "The number of superitems to place must be > 0"
             spool = superitems.SuperitemPool(superitems=to_place)
             layer = maxrects.maxrects_single_layer_online(spool, self.pallet_dims)
             return layer
@@ -339,8 +339,21 @@ class CompactBinPool:
 
     def __init__(self, bin_pool):
         self.compact_bins = []
+        self._original_bin_pool = bin_pool
         for bin in bin_pool:
             self.compact_bins.append(CompactBin(bin.to_dataframe(), bin_pool.pallet_dims))
+
+    def get_original_bin_pool(self):
+        """
+        Return the uncompacted bin pool
+        """
+        return self._original_bin_pool
+
+    def get_original_layer_pool(self):
+        """
+        Return the layer pool used to build bins prior to compacting
+        """
+        return self._original_bin_pool.layer_pool
 
     def plot(self):
         """
