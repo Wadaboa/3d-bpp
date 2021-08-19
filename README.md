@@ -15,6 +15,10 @@ The bins building procedure is always handled in a procedural way, stacking laye
 
 ## Solutions
 
+<p align="center">
+	<img src="assets/flow.png" />
+</p>
+
 Below you can find a broad explanation of each implemented solution. Every procedure can be called through the same function (`main()` in module `main.py`), by changing the `procedure` parameter (it could be `bl` for baseline, `mr` for maxrects or `cg` for the column generation approach). Down below you can find a MWE on how to use the library:
 ```python
 from src import config, dataset, main
