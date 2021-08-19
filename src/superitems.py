@@ -103,14 +103,6 @@ class Superitem:
         # Represents a list of superitems
         self.items = items
 
-    def get_items_coords(self, width=0, depth=0, height=0):
-        """
-        Return a dictionary c of coordinates with one entry for each
-        item in the superitem, s.t. c[i] = (x, y, z) represents the
-        coordinates of item i relative to the superitem itself
-        """
-        raise NotImplementedError()
-
     @property
     def width(self):
         """
@@ -183,7 +175,20 @@ class Superitem:
         """
         return len(self.id)
 
+    def get_items_coords(self, width=0, depth=0, height=0):
+        """
+        Return a dictionary c of coordinates with one entry for each
+        item in the superitem, s.t. c[i] = (x, y, z) represents the
+        coordinates of item i relative to the superitem itself
+        """
+        raise NotImplementedError()
+
     def get_items_dims(self):
+        """
+        Return a dictionary d of dimensions with one entry for each
+        item in the superitem, s.t. d[i] = (w, d, h) represents the
+        dimensions of item i in the superitem
+        """
         all_dims = dict()
         for i in range(len(self.items)):
             dims = self.items[i].get_items_dims()

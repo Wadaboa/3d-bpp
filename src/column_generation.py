@@ -63,13 +63,11 @@ def superitems_duals(superitems_pool, duals):
 
 def master_problem(layer_pool, tlim=None, relaxation=True, enable_output=False):
     """
-    Model with relaxed/not-relaxed version for computing the Reduced Master Problem based on
-    Dantzig-Wolfe decomposition using Lagrangian multipliers to achieve better results, used to
-    compute Items duals thanks to Linear Solver.
-    Returns:
-    - the objective value which tries to minimize the sum of alpha[l] * h[l] where l is each layer and h[l] is the height of Layer l,
-    - alpha[l] represents a boolean/float variable based on the layer selection,
-    - duals for each Item computed on the constraints
+    Solve the master problem, either in its full version (MP)
+    or in its relaxed version (RMP). Returns the following:
+    - Objective value: minimization of sum(alpha[l] * h[l]), with h heights and l layer
+    - Alpha values: alpha[l] represents layer selection
+    - [RMP] Duals: one dual for each item
     """
     logger.info("RMP defining variables and constraints")
 
@@ -100,6 +98,7 @@ def master_problem(layer_pool, tlim=None, relaxation=True, enable_output=False):
     # Constraints
     constraints = []
     coefficients = np.matmul(fsi.T, zsl)
+
     # Select each item at least once
     # sum(al[l] * zsl[s, l] * fsi[s, i])
     for i in range(n_items):
@@ -131,14 +130,17 @@ def master_problem(layer_pool, tlim=None, relaxation=True, enable_output=False):
     if status in (slv.OPTIMAL, slv.FEASIBLE):
         logger.info(f"RMP solved")
 
+        # Extract alpha values
         alphas = [al[l].solution_value() for l in range(n_layers)]
         logger.debug(f"RMP alphas: {alphas}")
         if not all(alphas[l] in (0, 1) for l in range(n_layers)):
             logger.debug("RMP solution not feasible (at least one alpha value is not binary)")
 
+        # Extract objective value
         objective = slv.Objective().Value()
         logger.debug(f"RMP objective: {objective}")
 
+        # Extract duals
         if relaxation:
             duals = np.array([c.DualValue() for c in constraints])
             logger.debug(f"RMP duals: {duals}")
@@ -246,9 +248,11 @@ def pricing_problem_no_placement_mip(
     if status in (slv.OPTIMAL, slv.FEASIBLE):
         logger.info(f"SP-NP-MIP solved")
 
+        # Extract objective value
         objective = slv.Objective().Value()
         logger.debug(f"SP-NP-MIP objective: {objective}")
 
+        # Extract selected superitems
         superitems_in_layer = [s for s in range(n_superitems) if zsl[s].solution_value() == 1]
         logger.debug(f"SP-NP-MIP selected {len(superitems_in_layer)}/{n_superitems} superitems")
 
@@ -337,9 +341,11 @@ def pricing_problem_no_placement_cp(
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         logger.info(f"SP-NP-CP solved")
 
+        # Extract objective value
         objective = slv.ObjectiveValue()
         logger.debug(f"SP-NP-CP objective: {objective}")
 
+        # Extract selected superitems
         superitems_in_layer = [s for s in range(n_superitems) if slv.Value(zsl[s]) == 1]
         logger.debug(f"SP-NP-CP selected {len(superitems_in_layer)}/{n_superitems} superitems")
 
@@ -427,6 +433,8 @@ def pricing_problem_placement_cp(
     layer = None
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         logger.info(f"SP-P-CP solved")
+
+        # Extract coordinates
         sol = dict()
         for s in superitems_in_layer:
             sol[f"c_{s}_x"] = slv.Value(cblx[s])
@@ -546,6 +554,8 @@ def pricing_problem_placement_mip(
     layer = None
     if status in (slv.OPTIMAL, slv.FEASIBLE):
         logger.info(f"SP-P-MIP solved")
+
+        # Extract coordinates
         sol = dict()
         for s in superitems_in_layer:
             sol[f"c_{s}_x"] = cix[s].solution_value()
@@ -608,7 +618,6 @@ def column_generation(
 
     logger.info("Starting CG")
     final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
-    n_superitems = len(layer_pool.superitems_pool)
     best_rmp_obj, num_stag_iters = float("inf"), 0
 
     # Starting CG iterations cycle

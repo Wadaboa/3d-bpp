@@ -160,6 +160,9 @@ def main(
     cg_sp_p_type="cp",
     cg_return_only_last=False,
 ):
+    """
+    External interface to all the implemented solutions to solve 3D-BPP
+    """
     assert max_iters > 0, "The number of maximum iteration must be > 0"
     assert procedure in ("mr", "bl", "cg"), "Unsupported procedure"
 

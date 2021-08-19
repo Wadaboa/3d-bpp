@@ -200,7 +200,9 @@ class BinPool:
 
         # Get single superitems that are not yet covered
         # (assuming that the superitems pool in the layer pool contains all single superitems)
-        superitems_list = self.layer_pool.not_covered_single_superitems()
+        superitems_list = self.layer_pool.not_covered_single_superitems(
+            singles_removed=singles_removed
+        )
 
         # Sort superitems by ascending height
         superitems_list = [
