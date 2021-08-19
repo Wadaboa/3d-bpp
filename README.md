@@ -13,6 +13,14 @@ All solutions are based on the concept of layers, which are collections of items
 
 The bins building procedure is always handled in a procedural way, stacking layers on top of each other until a bin is full and opening new bins as needed. Before layers are placed in a bin, they are filtered based on a set of criteria (as described in [[1]](#1)), such as item coverage and layer density. After layers are placed in a bin, some items could still be "flying" (i.e. have zero support at their base): to solve this issue, we let items "fall" to the ground as much as possible, without allowing intersections, thus ensuring compactness and correctness.
 
+## Dataset
+
+The dataset in use is based on the benchmark dataset introduced in [[1]](#1). As the original code is not publicly available, we made our best effort to reproduce the dataset as closely as possible. A pre-computed dataset with 1M examples is available in the `data/` folder (`products.pkl`).
+
+<p align="center">
+	<img src="assets/dataset.png" />
+</p>
+
 ## Solutions
 
 <p align="center">

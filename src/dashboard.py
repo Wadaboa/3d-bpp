@@ -32,6 +32,9 @@ def get_altair_hist_plot(series, name, bin_min, bin_max, bin_step):
 
 
 # Title section
+st.set_page_config(
+    page_title="3D Bin Packing",
+)
 st.header("3D Bin Packing")
 
 

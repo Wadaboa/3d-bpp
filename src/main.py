@@ -239,6 +239,6 @@ def main(
     # Build a pool of bins from the layer pool and compact
     # all layers in each bin to avoid having "flying" products
     bin_pool = bins.BinPool(
-        final_layer_pool, config.PALLET_DIMS, singles_removed=all_singles_removed
+        final_layer_pool, config.PALLET_DIMS, singles_removed=set(all_singles_removed)
     )
     return bins.CompactBinPool(bin_pool)
