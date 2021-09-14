@@ -540,7 +540,7 @@ class LayerPool:
         for l in self.layers:
             covered_spool.extend(l.superitems_pool)
 
-        return [s for s in self.superitems_pool if not covered_spool.get_index(s)]
+        return [s for s in self.superitems_pool if covered_spool.get_index(s) is None]
 
     def get_heights(self):
         """

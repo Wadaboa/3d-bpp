@@ -21,6 +21,7 @@ def maxrects_multiple_layers(superitems_pool, pallet_dims, add_single=True):
     # Return a layer with a single item if only one is present in the superitems pool
     if len(superitems_pool) == 1:
         layer_pool = layers.LayerPool(superitems_pool, pallet_dims, add_single=True)
+        uncovered = 0
     else:
         generated_pools = []
         for strategy in MAXRECTS_PACKING_STRATEGIES:
