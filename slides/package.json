@@ -7,8 +7,15 @@
   },
   "dependencies": {
     "@slidev/cli": "^0.23.0",
+    "@slidev/theme-apple-basic": "^0.20.0",
+    "@slidev/theme-bricks": "^0.0.2",
     "@slidev/theme-default": "*",
     "@slidev/theme-seriph": "*"
   },
-  "name": "slides"
+  "name": "slides",
+  "assets": [
+    {
+      "assets": "../assets/"
+    }
+  ]
 }
