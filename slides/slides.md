@@ -39,8 +39,8 @@ University of Bologna - Academic Year 2020/21
 
 ## Problem definition
 
-- We are given a set of $n$ rectangular-shaped _items_, each characterized by width $w_j$, depth $d_j$ and height $h_j$ $(j\in J=\{1,\dots,n\})$
-- We are also given an unlimited number of identical 3D containers (_bins_) having width $W$, depth $D$ and height $H$
+- We are given a set of $n$ rectangular-shaped _items_, each characterized by width $w_j$, depth $d_j$ and height $h_j$
+- We are given a number of identical 3D containers (_bins_) having width $W$, depth $D$ and height $H$
 - The _three-dimensional bin-packing problem_ (3D-BPP) consists in orthogonally packing all the items into the minimum number of bins
 
 ## Assumptions
@@ -73,7 +73,7 @@ University of Bologna - Academic Year 2020/21
 $$
 \begin{array} {|l|l|l|}\hline 
   \textbf{Characteristic} & \textbf{Distribution} & \textbf{Parameters}        \\ \hline
-\text{Depth/width sratio } R_{DW}       & \text{Normal}                & (0.695,0.118)  \\
+\text{Depth/width ratio } R_{DW}       & \text{Normal}                & (0.695,0.118)  \\
 \text{Height/width ratio } R_{HW}      & \text{Lognormal}             & (-0.654,0.453) \\
 \text{Repetition } F             & \text{Lognormal}             & (0.544,0.658)  \\
 \text{Volume } V     & \text{Lognormal}             & (2.568,0.705) \\ 
@@ -82,7 +82,7 @@ $$
 $$
 
 ## Reasoning
-1. Volumes: $V\sim LN (\mu, \sigma), \mu=\frac{\sum_{j=1}^{N}\log v_j}{N}, \sigma=\frac{\sum_{j=1}^{N}(\log v_j-\mu)^2}{N},N=166407, j\in\{C_1,\dots C_5\}$
+1. Volumes: $V\sim LN (\mu, \sigma^2), \mu=\frac{\sum_{j=1}^{N}\log v_j}{N}, \sigma^2=\frac{\sum_{j=1}^{N}(\log v_j-\mu)^2}{N},N=166407, j\in\{C_1,\dots C_5\}$
 1. Widths: $W=(\frac{V}{R_{DW} \times R_{HW}})^{\frac{1}{3}}$
 1. Depths: $D=W\times R_{DW}$
 1. Heights: $H=W\times R_{HW}$
@@ -97,7 +97,7 @@ $$
 - Building procedure: single, then horizontal and then vertical
 - Possibility to restrict horizontal superitems (either _2W_ or _2D_ or _4_ or none)
 - Horizontal superitems are composed of items having the exact same dimensions
-- Vertical superitems are composed of items s.t. the ones on top have an area support of at least $70\%$ thanks to the ones underneath
+- Vertical superitems are composed of items s.t. the ones on top have an area support of at least $70\%$
 - Vertical superitems can be composed of at maximum $M$ superitems (either single or horizontal)
 
 ---
@@ -105,10 +105,11 @@ $$
 # Layers
 
 <p align="center">
-  <img src='/layer-pool-example.png'/>
+  <img src='/layer-pool-example.png' width='350'/>
 </p>
 
 - A layer is defined as a two-dimensional arrangement of items within the horizontal boundaries of a bin with no superitems stacked on top of each other
+- Superitems are placed relative to layers and layers are placed relative to bins
 
 ---
 
@@ -125,7 +126,7 @@ layout: two-cols
 # Baseline
 
 <p align="left">
-  <img src='/sppsi.png' width="400"/>
+  <img src='/sppsi.png' width="400" style='margin-top: 60px'/>
 </p>
 
 ::right::
@@ -141,46 +142,65 @@ layout: two-cols
 - (13) and (14): ensure that items are placed within the boundaries of the bin
 
 ---
+layout: two-cols
+---
 
 # Maxrects
 
 <p align="center">
-  <img src='/maxrects.png' width="500"/>
+  <img src='/maxrects.png' width="380" style='margin-top: 50px'/>
 </p>
 
----
-layout: two-cols
+::right::
+
+# Details
+
+- Maxrects is a procedural algorithm for solving the 2D bin packing problem
+- Height groups: divide the whole pool of superitems into groups having heights within a given tolerance
+- Maxrects is used to generate layers
+- Run multiple strategies (Bottom-Left, Best Area Fit, Best Short Side Fit and Best Long Side Fit) and select the most dense layers
+
 ---
 
 # Column generation
 
 <p align="center">
-  <img src='/cg.png' width="200"/>
+  <img src='/cg.png' width="250" />
 </p>
-
-<p align="center">
-  <img src='/rmp.png' width="400"/>
-</p>
-
-<p align="center">
-  <img src='/sp.png' width="400"/>
-</p>
-
-::right::
-
-## Models
-
-_RMP_
-  - $\lambda$ are the dual variables corresponding to constraints (18)
-
-_SP_
-  - $o^l-\sum_i\sum_s\lambda_i f_{si} z_{sl}$ is the reduced cost of a new layer $l$
-  - No-placement and placement strategy
-
-## Details
 
 - Warm start: maxrects vs single item layers
-- Optimality: no branch-and-price scheme
+- Each iteration builds only a single layer and adds it to the whole pool
+- Stopping criterion: maximum iterations or convergence (non-negative reduced cost)
+- Optimality: no branch-and-price scheme 
+
+---
+
+# RMP
+
+<p align="center">
+  <img src='/rmp.png' width="600"/>
+</p>
+
+- RMP selects the best layers so far
+- $\alpha_l\ge 0$ represents the linear relaxation of the integrality constraint $\alpha_l\in\{0,1\}$
+- $\lambda$ are the dual variables corresponding to constraints (18)
+- The master problem is solved using `BOP` (it only contains boolean variables), while the reduced one is solved with `GLOP` (linear program)
+
+---
+
+# SP
+
+<p align="center">
+  <img src='/sp.png' width="600"/>
+</p>
+
+- SP selects items and positions them in a new layer
+- $o^l-\sum_i\sum_s\lambda_i f_{si} z_{sl}$ is the reduced cost of a new layer $l$
+- SP can be solved in the following ways
+    - Maxrects: solve the whole pricing subproblem heuristically, using maxrects to place superitems by biggest duals first
+    - Placement and no-placement strategy
+        - No-placement: serves as an item selection mechanism, thus ignoring the expensive placement constraints (MIP or CP)
+        - Placement: checks whether there is a feasible placement of the selected items in a layer and place them if possible, otherwise iterate with the no-placement model (MIP or CP or Maxrects)
 
 ---
 
@@ -219,6 +239,7 @@ _SP_
 - Integrate the branch-and-price scheme into column generation to prove optimality
 - Handle weight constraints and bin load capacity
 - Improve item support through MP models (as described in the paper)
+- Load bins inside containers
 
 ---
 layout: center
@@ -228,6 +249,7 @@ layout: center
 
 ```python
 python3 -m streamlit run src/dashboard.py
+jupyter notebook bpp.ipynb
 ```
 
 ---
