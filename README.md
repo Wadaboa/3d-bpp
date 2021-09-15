@@ -126,6 +126,18 @@ For a more entertaining and interactive solution, you can also run the implement
 python3 -m streamlit run src/dashboard.py
 ```
 
+## Slides
+
+To start the slide show:
+
+1. Change directory to `slides/`
+1. Run `npm install` and `npm run dev`
+2. Visit http://localhost:3030
+
+Edit the [slides.md](./slides/slides.md) to see the changes.
+
+Learn more about Slidev on [documentations](https://sli.dev/).
+
 ## References
 - <a id="1">[1]</a>
   _Samir Elhedhli, Fatma Gzara and Burak Yildiz (2019)_,\

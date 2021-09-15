@@ -130,3 +130,9 @@ dmypy.json
 
 # VSCode
 .vscode
+
+# Slidev
+slides/node_modules
+slides/index.html
+slides/.remote-assets
+slides/components
