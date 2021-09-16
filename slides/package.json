@@ -10,12 +10,16 @@
     "@slidev/theme-apple-basic": "^0.20.0",
     "@slidev/theme-bricks": "^0.0.2",
     "@slidev/theme-default": "*",
-    "@slidev/theme-seriph": "*"
+    "@slidev/theme-seriph": "*",
+    "slidev-theme-light-icons": "^1.0.2"
   },
   "name": "slides",
   "assets": [
     {
       "assets": "../assets/"
     }
-  ]
+  ],
+  "devDependencies": {
+    "playwright-chromium": "^1.14.1"
+  }
 }

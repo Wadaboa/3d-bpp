@@ -59,8 +59,8 @@ dw_ratio_plot = get_altair_hist_plot(
     product_dataset.products.depth / product_dataset.products.width,
     "D/W Ratio",
     0,
-    10,
-    0.5,
+    1,
+    0.01,
 )
 st.altair_chart(dw_ratio_plot, use_container_width=True)
 
@@ -69,8 +69,8 @@ hw_ratio_plot = get_altair_hist_plot(
     product_dataset.products.height / product_dataset.products.width,
     "H/W Ratio",
     0,
-    10,
-    0.5,
+    2,
+    0.05,
 )
 st.altair_chart(hw_ratio_plot, use_container_width=True)
 
