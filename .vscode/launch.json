@@ -1,0 +1,23 @@
+{
+  "configurations": [
+    {
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true,
+      "module": "3d-bpp.__main__",
+      "name": "Python: 3d-bpp",
+      "request": "launch",
+      "type": "python"
+    },
+    {
+      "autoReload": {
+        "enable": true
+      },
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "module": "${command:extension.commandvariable.file.relativeFileDotsNoExtension}",
+      "name": "Python: Module",
+      "request": "launch",
+      "type": "python"
+    }
+  ]
+}

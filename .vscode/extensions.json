@@ -1,0 +1,15 @@
+{
+  "recommendations": [
+    "aaron-bond.better-comments",
+    "davidanson.vscode-markdownlint",
+    "dangmai.workspace-default-settings",
+    "editorconfig.editorconfig",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-toolsai.jupyter",
+    "njpwerner.autodocstring",
+    "redhat.vscode-yaml",
+    "streetsidesoftware.code-spell-checker",
+    "vivaxy.vscode-conventional-commits"
+  ]
+}
