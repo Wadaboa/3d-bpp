@@ -1,0 +1,16 @@
+{
+  "default": true,
+  "line_length": false,
+  "ul-indent": {
+    "indent": 4
+  },
+  "list-marker-space": {
+    "ul_single": 3,
+    "ul_multi": 3
+  },
+  "no-inline-html": {
+    "allowed_elements": [
+      "style"
+    ]
+  }
+}

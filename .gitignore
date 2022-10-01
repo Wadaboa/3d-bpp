@@ -128,11 +128,18 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# VSCode
-.vscode
+# VisualStudioCode
+.vscode/*
+!.vscode/settings.default.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
 # Slidev
 slides/node_modules
 slides/index.html
 slides/.remote-assets
 slides/components
+
+# Logs folder
+logs/*.log

@@ -1,0 +1,44 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=47", "wheel>=0.34"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.isort]
+known_tests = 'tests'
+line_length = 100
+profile = "black"
+py_version = 310
+sections = [
+  'FUTURE',
+  'STDLIB',
+  'THIRDPARTY',
+  'FIRSTPARTY',
+  'LOCALFOLDER',
+  'TESTS',
+]
+skip_gitignore = true
+src_paths = ["3dbpp"]
+
+[tool.mypy]
+disallow_incomplete_defs = false
+exclude = ["^tests/", "^build/"]
+follow_imports = "silent"
+ignore_missing_imports = true
+no_implicit_optional = false
+python_version = "3.10"
+show_column_numbers = true
+show_error_codes = true
+warn_no_return = true
+warn_return_any = false
+warn_unreachable = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+addopts = "--maxfail=25 --cov-report=html --cov-report=term --no-cov-on-fail -ra"

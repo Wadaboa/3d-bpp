@@ -1,0 +1,73 @@
+# EditorConfig is awesome: http://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# Defaults for all files
+[*]
+charset = utf-8
+end_of_line = lf
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Python files
+[*.{py,pyx,ipynb}]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[setup.cfg]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Markdown files
+[*.{md,mdx}]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = false
+
+# Yaml files
+[*.{yaml,yml}]
+indent_size = 2
+indent_style = space
+
+# Toml files
+[*.toml]
+indent_size = 2
+indent_style = space
+
+# Json files
+[*.{json,jsonc,json5}]
+indent_size = 2
+indent_style = space
+
+# TypeScript files
+[*.{ts,tsx}]
+indent_style = space
+indent_size = 2
+quote_type = single
+
+# C/C++ files:
+[*.{c,h,cpp,hpp}]
+indent_style = tab
+
+# Shell files:
+[*.sh]
+indent_style = tab
+
+# Makefiles files
+[Makefile]
+indent_style = tab
+trim_trailing_whitespace = false
+
+[*.mk]
+indent_style = tab
+trim_trailing_whitespace = false
+
+# XML files
+[*.xml]
+indent_style = space
+indent_size = 2
