@@ -1,7 +1,10 @@
+import maxrects
 import numpy as np
 import pandas as pd
 
-import utils, superitems, maxrects, layers
+from .layers import Layer
+from .superitems import SuperitemPool
+from .utils import Coordinate, Dimension, argsort, get_pallet_plot, plot_product
 
 
 class Bin:
@@ -38,9 +41,7 @@ class Bin:
         """
         Add the given layer to the current bin
         """
-        assert isinstance(
-            layer, layers.Layer
-        ), "The given layer should be an instance of the Layer class"
+        assert isinstance(layer, Layer), "The given layer should be an instance of the Layer class"
         self.layer_pool.add(layer)
 
     def get_layer_zs(self):
@@ -76,7 +77,7 @@ class Bin:
         bin and by stacking them vertically
         """
         height = 0
-        ax = utils.get_pallet_plot(self.pallet_dims)
+        ax = get_pallet_plot(self.pallet_dims)
         for layer in self.layer_pool:
             ax = layer.plot(ax=ax, height=height)
             height += layer.height
@@ -174,7 +175,7 @@ class BinPool:
             a new layer, starting from the given pool
             """
             assert len(to_place) > 0, "The number of superitems to place must be > 0"
-            spool = superitems.SuperitemPool(superitems=to_place)
+            spool = SuperitemPool(superitems=to_place)
             layer = maxrects.maxrects_single_layer_online(spool, self.pallet_dims)
             return layer
 
@@ -183,7 +184,7 @@ class BinPool:
             Try to place items in the bin with the least spare height
             and fallback to the other open bins, if the layer doesn't fit
             """
-            sorted_indices = utils.argsort(remaining_heights)
+            sorted_indices = argsort(remaining_heights)
             working_index = 0
             while len(superitems_list) > 0 and working_index < len(self.bins):
                 working_bin = self.bins[sorted_indices[working_index]]
@@ -205,9 +206,7 @@ class BinPool:
         )
 
         # Sort superitems by ascending height
-        superitems_list = [
-            superitems_list[i] for i in utils.argsort([s.height for s in superitems_list])
-        ]
+        superitems_list = [superitems_list[i] for i in argsort([s.height for s in superitems_list])]
 
         # Get placeable and unplaceable items
         remaining_heights = self.get_remaining_heights()
@@ -220,7 +219,7 @@ class BinPool:
         # Place unplaceable items in a new bin
         remaining_items += superitems_list
         if len(remaining_items) > 0:
-            spool = superitems.SuperitemPool(superitems=remaining_items)
+            spool = SuperitemPool(superitems=remaining_items)
             lpool = maxrects.maxrects_multiple_layers(spool, self.pallet_dims, add_single=False)
             self.layer_pool.extend(lpool)
             self.bins += self._build(lpool)
@@ -314,7 +313,7 @@ class CompactBin:
                 zs = [
                     prev_item.z.item() + prev_item.height.item()
                     for _, prev_item in items_below.iterrows()
-                    if utils.do_overlap(item, prev_item)
+                    if do_overlap(item, prev_item)
                 ]
                 new_z = max(zs) if len(zs) > 0 else 0
                 bin_df.at[i, "z"] = new_z
@@ -324,13 +323,13 @@ class CompactBin:
         """
         Return a bin plot without the layers representation
         """
-        ax = utils.get_pallet_plot(self.pallet_dims)
+        ax = get_pallet_plot(self.pallet_dims)
         for _, item in self.df.iterrows():
-            ax = utils.plot_product(
+            ax = plot_product(
                 ax,
                 item["item"],
-                utils.Coordinate(item.x, item.y, item.z),
-                utils.Dimension(item.width, item.depth, item.height),
+                Coordinate(item.x, item.y, item.z),
+                Dimension(item.width, item.depth, item.height),
             )
         return ax
 

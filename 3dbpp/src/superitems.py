@@ -2,9 +2,8 @@ from collections import defaultdict
 
 import numpy as np
 import pandas as pd
-from loguru import logger
-
 import utils
+from loguru import logger
 
 
 class Item:
@@ -213,7 +212,7 @@ class Superitem:
 
     def __str__(self):
         return (
-            f"Superitem(ids={self.id}, width={self.width}, depth={self.depth}, height={self.height}, "
+            f"Superitem(ids={self.id}, width={self.width}, depth={self.depth}, height={self.height},"
             f"weight={self.weight}, volume={self.volume}, coords={self.get_items_coords()})"
         )
 

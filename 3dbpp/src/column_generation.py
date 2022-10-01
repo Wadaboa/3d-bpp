@@ -1,12 +1,13 @@
 import time
+
 import numpy as np
 from loguru import logger
-
-from ortools.sat.python import cp_model
 from ortools.linear_solver import pywraplp
+from ortools.sat.python import cp_model
 
-import layers, utils, maxrects
-
+from .layers import LayerPool
+from .maxrects import maxrects_single_layer_offline, maxrects_single_layer_online
+from .utils import argsort, build_layer_from_model_output
 
 # Define 'pywraplp' solver parameters
 INTEGER_PARAMETERS = ["PRESOLVE", "LP_ALGORITHM", "INCREMENTALITY"]
@@ -159,7 +160,7 @@ def pricing_problem_maxrects(superitems_pool, pallet_dims, duals):
     start = time.time()
     logger.info("SP-MR starting computation")
     sduals = superitems_duals(superitems_pool, duals)
-    layer = maxrects.maxrects_single_layer_online(superitems_pool, pallet_dims, sduals)
+    layer = maxrects_single_layer_online(superitems_pool, pallet_dims, sduals)
     duration = time.time() - start
 
     if layer is not None:
@@ -315,7 +316,7 @@ def pricing_problem_no_placement_cp(
     mdl.Minimize(obj)
 
     # Search strategy
-    duals_sort_index = utils.argsort(
+    duals_sort_index = argsort(
         [sum([fsi[s, i] * duals[i] for i in range(n_items)]) for s in range(n_superitems)]
     )
     mdl.AddDecisionStrategy([ol], cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
@@ -402,7 +403,7 @@ def pricing_problem_placement_cp(
 
     # Symmetry Breaking
     areas = [ws[s] * ds[s] for s in superitems_in_layer]
-    area_ind = utils.argsort(areas, reverse=True)
+    area_ind = argsort(areas, reverse=True)
     biggest_ind = superitems_in_layer[area_ind[0]]
     second_ind = superitems_in_layer[area_ind[1]]
     mdl.Add(cblx[biggest_ind] <= mdl.NewConstant(pallet_dims.width // 2))
@@ -411,7 +412,7 @@ def pricing_problem_placement_cp(
     mdl.Add(cbly[biggest_ind] <= cbly[second_ind])
 
     # Search strategy
-    indexes = utils.argsort([sduals[s] for s in superitems_in_layer], reverse=True)
+    indexes = argsort([sduals[s] for s in superitems_in_layer], reverse=True)
     mdl.AddDecisionStrategy(
         [xint[i] for i in indexes], cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE
     )
@@ -441,7 +442,7 @@ def pricing_problem_placement_cp(
             sol[f"c_{s}_y"] = slv.Value(cbly[s])
 
         # Build layer
-        layer = utils.build_layer_from_model_output(
+        layer = build_layer_from_model_output(
             superitems_pool,
             superitems_in_layer,
             sol,
@@ -562,7 +563,7 @@ def pricing_problem_placement_mip(
             sol[f"c_{s}_y"] = ciy[s].solution_value()
 
         # Build layer
-        layer = utils.build_layer_from_model_output(
+        layer = build_layer_from_model_output(
             superitems_pool,
             superitems_in_layer,
             sol,
@@ -582,7 +583,7 @@ def pricing_problem_placement_mr(superitems_pool, superitems_in_layer, pallet_di
     (if not placeable, return None)
     """
     start = time.time()
-    layer = maxrects.maxrects_single_layer_offline(
+    layer = maxrects_single_layer_offline(
         superitems_pool,
         pallet_dims,
         superitems_in_layer=superitems_in_layer,
@@ -617,7 +618,7 @@ def column_generation(
     ), "Unsupported subproblem placement procedure"
 
     logger.info("Starting CG")
-    final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
+    final_layer_pool = LayerPool(layer_pool.superitems_pool, pallet_dims)
     best_rmp_obj, num_stag_iters = float("inf"), 0
 
     # Starting CG iterations cycle
@@ -638,7 +639,7 @@ def column_generation(
 
         # Return only those layers in the last CG iteration
         if return_only_last:
-            final_layer_pool = layers.LayerPool(layer_pool.superitems_pool, pallet_dims)
+            final_layer_pool = LayerPool(layer_pool.superitems_pool, pallet_dims)
 
         # Add to final layer pool only layers with alpha > 0 which weren't already selected
         final_layer_pool.extend(

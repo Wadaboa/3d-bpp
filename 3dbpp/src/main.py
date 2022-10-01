@@ -11,7 +11,7 @@ def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.
     assert height_tol >= 0 and density_tol >= 0.0, "Tolerance parameters must be non-negative"
 
     # Get unique heights
-    unique_heights = sorted(set(s.height for s in superitems_pool))
+    unique_heights = sorted({s.height for s in superitems_pool})
     height_sets = {
         h: {k for k in unique_heights[i:] if k - h <= height_tol}
         for i, h in enumerate(unique_heights)

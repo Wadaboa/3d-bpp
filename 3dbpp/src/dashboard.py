@@ -1,11 +1,12 @@
+import altair as alt
+import config
+import dataset
+import main
 import numpy as np
 import pandas as pd
 import streamlit as st
-import altair as alt
+import utils
 from matplotlib import pyplot as plt
-
-import config, dataset, main, utils
-
 
 # Matplotlib params
 plt.style.use("seaborn")

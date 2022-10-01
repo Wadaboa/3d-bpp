@@ -1,7 +1,8 @@
-from ortools.sat.python import cp_model
 from loguru import logger
+from ortools.sat.python import cp_model
 
-import utils, layers
+from .layers import LayerPool
+from .utils import argsort, build_layer_from_model_output
 
 
 def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
@@ -115,7 +116,7 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
     model.Minimize(obj)
 
     # Search by biggest area first
-    indices_by_area = utils.argsort([ws[s] * ds[s] for s in range(n_superitems)], reverse=True)
+    indices_by_area = argsort([ws[s] * ds[s] for s in range(n_superitems)], reverse=True)
     model.AddDecisionStrategy(
         [cix[s] for s in indices_by_area],
         cp_model.CHOOSE_LOWEST_MIN,
@@ -169,11 +170,11 @@ def baseline(superitems_pool, pallet_dims, tlim=None, num_workers=4):
     logger.info(f"Solved baseline model in {solve_time:.2f} seconds")
 
     # Build the layer pool from the model's solution
-    layer_pool = layers.LayerPool(superitems_pool, pallet_dims)
+    layer_pool = LayerPool(superitems_pool, pallet_dims)
     for l in range(max_layers):
         if sol[f"o_{l}"] > 0:
             superitems_in_layer = [s for s in range(n_superitems) if sol[f"z_{s}_{l}"] == 1]
-            layer = utils.build_layer_from_model_output(
+            layer = build_layer_from_model_output(
                 superitems_pool, superitems_in_layer, sol, pallet_dims
             )
             layer_pool.add(layer)
