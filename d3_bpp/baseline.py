@@ -6,15 +6,18 @@ from .utils import argsort, build_layer_from_model_output
 
 
 def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
-    """
-    The baseline model directly assigns superitems to layers and positions
-    them by taking into account overlapment and layer height minimization.
-    It reproduces model [SPPSI] of the referenced paper (beware that it
-    might be very slow and we advice using it only for orders under 30 items).
+    """The baseline model directly assigns super_items to layers and positions them.
 
-    Samir Elhedhli, Fatma Gzara, Burak Yildiz,
-    "Three-Dimensional Bin Packing and Mixed-Case Palletization",
-    INFORMS Journal on Optimization, 2019.
+    This is done by taking into account overlapment and layer height minimization.
+
+    Notes:
+        It reproduces model [SPPSI] of the referenced paper (beware that it
+        might be very slow and we advice using it only for orders under 30 items).
+
+    References:
+        Samir Elhedhli, Fatma Gzara, Burak Yildiz,
+        "Three-Dimensional Bin Packing and Mixed-Case Palletization",
+        INFORMS Journal on Optimization, 2019.
     """
     # Model and solver declaration
     model = cp_model.CpModel()
@@ -27,7 +30,7 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
     # Variables
     # Layer heights variables
     ol = {l: model.NewIntVar(0, max(hs), f"o_{l}") for l in range(max_layers)}
-    zsl, cix, ciy, xsj, ysj = dict(), dict(), dict(), dict(), dict()
+    zsl, cix, ciy, xsj, ysj = {}, {}, {}, {}, {}
     for s in range(n_superitems):
         # Coordinate variables
         cix[s] = model.NewIntVar(0, int(pallet_dims.width - ws[s]), f"c_{s}_x")
@@ -45,7 +48,7 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
 
     # Channeling variables
     # same[s, j, l] = 1 iff superitems s and j are both in layer l
-    same = dict()
+    same = {}
     for l in range(max_layers):
         for s in range(n_superitems):
             for j in range(n_superitems):
@@ -136,7 +139,7 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
     status = solver.Solve(model)
 
     # Extract results
-    sol = dict()
+    sol = {}
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         for l in range(max_layers):
             sol[f"o_{l}"] = solver.Value(ol[l])
@@ -152,10 +155,7 @@ def baseline_model(fsi, ws, ds, hs, pallet_dims, tlim=None, num_workers=4):
 
 
 def baseline(superitems_pool, pallet_dims, tlim=None, num_workers=4):
-    """
-    Call the baseline model with the given parameters and return
-    a layer pool
-    """
+    """Call the baseline model with the given parameters and return a layer pool."""
     # Initialize model variables
     fsi, _, _ = superitems_pool.get_fsi()
     ws, ds, hs = superitems_pool.get_superitems_dims()

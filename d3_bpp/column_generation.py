@@ -433,10 +433,10 @@ def pricing_problem_placement_cp(
     # Extract results
     layer = None
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        logger.info(f"SP-P-CP solved")
+        logger.info("SP-P-CP solved")
 
         # Extract coordinates
-        sol = dict()
+        sol = {}
         for s in superitems_in_layer:
             sol[f"c_{s}_x"] = slv.Value(cblx[s])
             sol[f"c_{s}_y"] = slv.Value(cbly[s])
@@ -476,7 +476,7 @@ def pricing_problem_placement_mip(
     # Variables
     cix = {s: slv.IntVar(0, pallet_dims.width - ws[s], f"c_{s}_x") for s in superitems_in_layer}
     ciy = {s: slv.IntVar(0, pallet_dims.depth - ds[s], f"c_{s}_y") for s in superitems_in_layer}
-    xsj, ysj = dict(), dict()
+    xsj, ysj = {}, {}
     for s in superitems_in_layer:
         for j in superitems_in_layer:
             if j != s:
@@ -557,7 +557,7 @@ def pricing_problem_placement_mip(
         logger.info(f"SP-P-MIP solved")
 
         # Extract coordinates
-        sol = dict()
+        sol = {}
         for s in superitems_in_layer:
             sol[f"c_{s}_x"] = cix[s].solution_value()
             sol[f"c_{s}_y"] = ciy[s].solution_value()

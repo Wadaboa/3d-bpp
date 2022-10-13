@@ -1,18 +1,24 @@
 import os
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 
+@dataclass
 class ProductDataset:
-    """
-    Construct a dataset of rectangular products,
-    given minimum and maximum values for each dimension
+    """Construct a dataset of cuboid products, given minimum and maximum values for each dimension.
 
-    Samir Elhedhli, Fatma Gzara, Burak Yildiz,
-    "Three-Dimensional Bin Packing and Mixed-Case Palletization",
-    INFORMS Journal on Optimization, 2019.
+    Reference:
+        Samir Elhedhli, Fatma Gzara, Burak Yildiz,
+        "Three-Dimensional Bin Packing and Mixed-Case Palletization",
+        INFORMS Journal on Optimization, 2019.
     """
+
+    product_path: Path = Path("data/products.pkl")
+    """Path to the generated products dataset stored as a pickle file."""
+    num_products: int = int(1e6)
 
     def __init__(
         self,

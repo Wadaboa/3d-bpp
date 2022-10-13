@@ -9,7 +9,10 @@
   "better-comments.highlightPlainText": false,
   "better-comments.multilineComments": true,
   // Spell Checker Settings
-  "cSpell.words": [],
+  "cSpell.words": [
+    "loguru",
+    "numpy"
+  ],
   // Conventional Commits Settings
   "conventionalCommits.emojiFormat": "emoji",
   "conventionalCommits.lineBreak": "\\n",

@@ -1,10 +1,100 @@
 {
   "configurations": [
     {
+      "args": [
+        "prod_gen",
+        "--output",
+        "data/products",
+        "--seed",
+        "42",
+        "--num-products",
+        "1000000",
+        "--width-range",
+        "200",
+        "800",
+        "--depth-range",
+        "200",
+        "800",
+        "--height-range",
+        "200",
+        "800",
+        "--mass-range",
+        "200",
+        "800"
+      ],
+      "autoReload": {
+        "enable": true
+      },
+      "console": "integratedTerminal",
       "cwd": "${workspaceFolder}",
       "justMyCode": true,
-      "module": "3d-bpp.__main__",
-      "name": "Python: 3d-bpp",
+      "name": "Debug Main: Product Generator",
+      "program": "${workspaceFolder}/debug_main.py",
+      "request": "launch",
+      "type": "python"
+    },
+    {
+      "args": [
+        "order_gen",
+        "--input",
+        "data/products/debug_products.pkl",
+        "--output",
+        "data/orders",
+        "--append-products-folder",
+        "--seed",
+        "42",
+        "--num-products",
+        "10",
+        "100",
+        "--width-range",
+        "200",
+        "800",
+        "--depth-range",
+        "200",
+        "800",
+        "--height-range",
+        "200",
+        "800",
+        "--mass-range",
+        "200",
+        "800"
+      ],
+      "autoReload": {
+        "enable": true
+      },
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true,
+      "name": "Debug Main: Order Generator",
+      "program": "${workspaceFolder}/debug_main.py",
+      "request": "launch",
+      "type": "python"
+    },
+    {
+      "args": [
+        "packer",
+        "--input",
+        "data/orders/debug_products/debug_order.pkl",
+        "--output",
+        "data/packing",
+        "--append-order-folder",
+        "--seed",
+        "42",
+        "--container-type",
+        "twenty_foot",
+        "--pallet-type",
+        "eur_1",
+        "--rotation-type",
+        "no_rotation"
+      ],
+      "autoReload": {
+        "enable": true
+      },
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true,
+      "name": "Debug Main: 3D-Bin Packing",
+      "program": "${workspaceFolder}/debug_main.py",
       "request": "launch",
       "type": "python"
     },
@@ -14,8 +104,9 @@
       },
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}",
+      "justMyCode": true,
       "module": "${command:extension.commandvariable.file.relativeFileDotsNoExtension}",
-      "name": "Python: Module",
+      "name": "Python: Current Module",
       "request": "launch",
       "type": "python"
     }

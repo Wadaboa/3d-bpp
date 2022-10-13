@@ -1,17 +1,28 @@
+"""Module to define and manage layers in the 3D BPP."""
+from __future__ import annotations
+
 import copy
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 from loguru import logger
 
-import utils, superitems, maxrects
+from d3_bpp.maxrects import maxrects_single_layer_offline
+from d3_bpp.plot.cuboid import Coordinate, Dimension
+from d3_bpp.utils import argsort, duplicate_keys, get_pallet_plot, plot_product
+
+from .superitems import SuperitemPool
 
 
+@dataclass
 class Layer:
-    """
-    A layer represents the placement of a collection of
-    items or superitems having similar heights
-    """
+    """A layer represents the placement of a group of items or super items having similar height."""
+
+    super_item_pool: SuperitemPool = field(default_factory=SuperitemPool)
+    """Super items placed inside the layer."""
+    super_item_coords: list[Coordinate]
+    """Coordinates of the super items placed inside the layer."""
 
     def __init__(self, superitems_pool, superitems_coords, pallet_dims):
         self.superitems_pool = superitems_pool
@@ -20,9 +31,7 @@ class Layer:
 
     @property
     def height(self):
-        """
-        Return the height of the current layer
-        """
+        """Return the height of the current layer."""
         return self.superitems_pool.get_max_height()
 
     @property
@@ -68,10 +77,10 @@ class Layer:
         Return a dictionary having as key the item id and as value
         the item coordinates in the layer
         """
-        items_coords = dict()
+        items_coords = {}
         for s, c in zip(self.superitems_pool, self.superitems_coords):
             coords = s.get_items_coords(width=c.x, depth=c.y, height=z)
-            duplicates = utils.duplicate_keys([items_coords, coords])
+            duplicates = duplicate_keys([items_coords, coords])
             if len(duplicates) > 0:
                 logger.error(f"Item repetition in the same layer, Items id:{duplicates}")
             items_coords = {**items_coords, **coords}
@@ -82,10 +91,10 @@ class Layer:
         Return a dictionary having as key the item id and as value
         the item dimensions in the layer
         """
-        items_dims = dict()
+        items_dims = {}
         for s in self.superitems_pool:
             dims = s.get_items_dims()
-            duplicates = utils.duplicate_keys([items_dims, dims])
+            duplicates = duplicate_keys([items_dims, dims])
             if len(duplicates) > 0:
                 logger.error(f"Item repetition in the same layer, Items id:{duplicates}")
             items_dims = {**items_dims, **dims}
@@ -111,9 +120,7 @@ class Layer:
         """
         Return a new layer without the given superitem
         """
-        new_spool = superitems.SuperitemPool(
-            superitems=[s for s in self.superitems_pool if s != superitem]
-        )
+        new_spool = SuperitemPool(superitems=[s for s in self.superitems_pool if s != superitem])
         new_scoords = [
             c
             for i, c in enumerate(self.superitems_coords)
@@ -131,7 +138,7 @@ class Layer:
         """
         Apply maxrects over superitems in layer
         """
-        return maxrects.maxrects_single_layer_offline(self.superitems_pool, self.pallet_dims)
+        return maxrects_single_layer_offline(self.superitems_pool, self.pallet_dims)
 
     def plot(self, ax=None, height=0):
         """
@@ -139,15 +146,15 @@ class Layer:
         having a maximum height given by the height of the layer
         """
         if ax is None:
-            ax = utils.get_pallet_plot(
-                utils.Dimension(self.pallet_dims.width, self.pallet_dims.depth, self.height)
+            ax = get_pallet_plot(
+                Dimension(self.pallet_dims.width, self.pallet_dims.depth, self.height)
             )
         items_coords = self.get_items_coords(z=height)
         items_dims = self.get_items_dims()
         for item_id in items_coords.keys():
             coords = items_coords[item_id]
             dims = items_dims[item_id]
-            ax = utils.plot_product(ax, item_id, coords, dims)
+            ax = plot_product(ax, item_id, coords, dims)
         return ax
 
     def to_dataframe(self, z=0):
@@ -198,7 +205,7 @@ class Layer:
     def __hash__(self):
         s_hashes = [hash(s) for s in self.superitems_pool]
         c_hashes = [hash(c) for c in self.superitems_coords]
-        strs = [f"{s_hashes[i]}/{c_hashes[i]}" for i in utils.argsort(s_hashes)]
+        strs = [f"{s_hashes[i]}/{c_hashes[i]}" for i in argsort(s_hashes)]
         return hash("-".join(strs))
 
 
@@ -231,8 +238,8 @@ class LayerPool:
         for superitem in self.superitems_pool:
             self.add(
                 Layer(
-                    superitems.SuperitemPool([superitem]),
-                    [utils.Coordinate(x=0, y=0)],
+                    SuperitemPool([superitem]),
+                    [Coordinate(x=0, y=0)],
                     self.pallet_dims,
                 )
             )
@@ -338,7 +345,7 @@ class LayerPool:
         Sort layers in the pool by decreasing density
         """
         densities = self.get_densities(two_dims=two_dims)
-        sorted_indices = utils.argsort(densities, reverse=True)
+        sorted_indices = argsort(densities, reverse=True)
         self.layers = [self.layers[i] for i in sorted_indices]
 
     def discard_by_densities(self, min_density=0.5, two_dims=False):
@@ -431,7 +438,7 @@ class LayerPool:
                     edited_layers.add(l)
                     duplicated_volumes = [s.volume for s in duplicated_superitems]
                     layer = layer.difference(
-                        [duplicated_indices[i] for i in utils.argsort(duplicated_volumes)[:-1]]
+                        [duplicated_indices[i] for i in argsort(duplicated_volumes)[:-1]]
                     )
 
             if l in edited_layers:
@@ -536,7 +543,7 @@ class LayerPool:
         """
         Return a list of superitems which are not present in any layer
         """
-        covered_spool = superitems.SuperitemPool(superitems=None)
+        covered_spool = SuperitemPool(superitems=None)
         for l in self.layers:
             covered_spool.extend(l.superitems_pool)
 

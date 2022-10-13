@@ -1,12 +1,13 @@
 import altair as alt
-import config
-import dataset
-import main
 import numpy as np
 import pandas as pd
 import streamlit as st
-import utils
 from matplotlib import pyplot as plt
+
+import d3_bpp.config.configuration as configuration
+import dataset
+import main
+import utils
 
 # Matplotlib params
 plt.style.use("seaborn")
@@ -43,15 +44,15 @@ st.header("3D Bin Packing")
 st.header("Dataset")
 product_dataset = dataset.ProductDataset(
     "data/products.pkl",
-    config.NUM_PRODUCTS,
-    config.MIN_PRODUCT_WIDTH,
-    config.MAX_PRODUCT_WIDTH,
-    config.MIN_PRODUCT_DEPTH,
-    config.MAX_PRODUCT_DEPTH,
-    config.MIN_PRODUCT_HEIGHT,
-    config.MAX_PRODUCT_HEIGHT,
-    config.MIN_PRODUCT_WEIGHT,
-    config.MAX_PRODUCT_WEIGHT,
+    configuration.NUM_PRODUCTS,
+    configuration.MIN_PRODUCT_WIDTH,
+    configuration.MAX_PRODUCT_WIDTH,
+    configuration.MIN_PRODUCT_DEPTH,
+    configuration.MAX_PRODUCT_DEPTH,
+    configuration.MIN_PRODUCT_HEIGHT,
+    configuration.MAX_PRODUCT_HEIGHT,
+    configuration.MIN_PRODUCT_WEIGHT,
+    configuration.MAX_PRODUCT_WEIGHT,
     force_overload=False,
 )
 
@@ -100,11 +101,11 @@ lower_bound = st.sidebar.selectbox(
     f"Lower bounds for the selected {ordered_products}-products order", ("L0", "L1", "L2")
 )
 if lower_bound == "L0":
-    lb = utils.get_l0_lb(order, config.PALLET_DIMS)
+    lb = utils.get_l0_lb(order, configuration.PALLET_DIMS)
 elif lower_bound == "L1":
-    lb, _, _, _ = utils.get_l1_lb(order, config.PALLET_DIMS)
+    lb, _, _, _ = utils.get_l1_lb(order, configuration.PALLET_DIMS)
 elif lower_bound == "L2":
-    lb, _, _, _ = utils.get_l2_lb(order, config.PALLET_DIMS)
+    lb, _, _, _ = utils.get_l2_lb(order, configuration.PALLET_DIMS)
 st.sidebar.write(f"Martello's {lower_bound} lower bound: {lb}")
 
 

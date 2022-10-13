@@ -1,27 +1,28 @@
+"""Module to define and manage items and super-items."""
+from __future__ import annotations
+
 from collections import defaultdict
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
-import utils
 from loguru import logger
 
+from .utils import Dimension
 
+
+@dataclass(frozen=True, order=True)
 class Item:
-    """
-    An item is a single product with a unique identifier
-    and a list of spatial dimensions
-    """
+    """An item is a single product with a unique identifier and its spatial dimensions."""
 
-    def __init__(self, id, width, depth, height, weight):
-        self.id = id
-        self.dimensions = utils.Dimension(width, depth, height, weight)
+    id_: int
+    """The id of the item."""
+    dimensions: Dimension
+    """The spatial dimensions of the item."""
 
     @classmethod
-    def from_series(cls, item):
-        """
-        Return an item from a Pandas Series representing a row of
-        the order extracted from the ProductDataset custom class
-        """
+    def from_series(cls, item: pd.Series):
+        """Return an item from a Pandas Series representing a row of the order extracted from the ProductDataset custom class"""
         return Item(item.name, item.width, item.depth, item.height, item.weight)
 
     @classmethod
@@ -188,7 +189,7 @@ class Superitem:
         item in the superitem, s.t. d[i] = (w, d, h) represents the
         dimensions of item i in the superitem
         """
-        all_dims = dict()
+        all_dims = {}
         for i in range(len(self.items)):
             dims = self.items[i].get_items_dims()
             dups = utils.duplicate_keys([all_dims, dims])
@@ -384,7 +385,7 @@ class VerticalSuperitem(Superitem):
 
     def get_items_coords(self, width=0, depth=0, height=0):
         # Adjust coordinates to account for stacking tolerance
-        all_coords = dict()
+        all_coords = {}
         for i in range(len(self.items)):
             width_offset = ((self.width - self.items[i].width) // 2) + width
             depth_offset = ((self.depth - self.items[i].depth) // 2) + depth
@@ -401,10 +402,12 @@ class VerticalSuperitem(Superitem):
         return all_coords
 
 
+@dataclass
 class SuperitemPool:
-    """
-    Set of superitems for a given order
-    """
+    """Collection of super items for a given order."""
+
+    super_items: list[Superitem] = field(default_factory=list)
+    """Super items in the pool."""
 
     def __init__(self, superitems=None):
         self.superitems = superitems or []

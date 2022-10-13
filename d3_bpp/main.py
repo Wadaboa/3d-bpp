@@ -1,17 +1,25 @@
+from __future__ import annotations
+
 from loguru import logger
 
-import layers, superitems, config, maxrects, column_generation, baseline, bins
+import baseline
+import bins
+import column_generation
+import d3_bpp.config.configuration as configuration
+import layers
+import maxrects
+import superitems
 
 
-def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.5):
-    """
-    Divide the whole pool of superitems into groups having either
-    the exact same height or an height within the given tolerance
+def get_height_groups(super_items_pool, pallet_dims, height_tol=0, density_tol=0.5):
+    """Divide the whole pool of super items into groups.
+
+    Each group is comprised of super items with similar height.
     """
     assert height_tol >= 0 and density_tol >= 0.0, "Tolerance parameters must be non-negative"
 
     # Get unique heights
-    unique_heights = sorted({s.height for s in superitems_pool})
+    unique_heights = sorted({s.height for s in super_items_pool})
     height_sets = {
         h: {k for k in unique_heights[i:] if k - h <= height_tol}
         for i, h in enumerate(unique_heights)
@@ -20,11 +28,11 @@ def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.
         if hj.issubset(hi):
             unique_heights.remove(j)
 
-    # Generate one group of superitems for each similar height
+    # Generate one group of super_items for each similar height
     groups = []
     for height in unique_heights:
         spool = [
-            s for s in superitems_pool if s.height >= height and s.height <= height + height_tol
+            s for s in super_items_pool if s.height >= height and s.height <= height + height_tol
         ]
         spool = superitems.SuperitemPool(superitems=spool)
         if (
@@ -36,29 +44,29 @@ def get_height_groups(superitems_pool, pallet_dims, height_tol=0, density_tol=0.
     return groups
 
 
-def maxrects_warm_start(superitems_pool, height_tol=0, density_tol=0.5, add_single=True):
+def maxrects_warm_start(super_items_pool, height_tol=0, density_tol=0.5, add_single=True):
+    """Compute the warm start layer pool from maxrects.
+
+    This is done by calling the maxrects procedure on each height group.
     """
-    Compute the warm start layer pool from maxrects, by calling the
-    maxrects procedure on each height group
-    """
-    logger.info("MR computing layers")
+    logger.info("MaxRect computing layers")
 
     # Compute height groups and initialize initial layer pool
     height_groups = get_height_groups(
-        superitems_pool, config.PALLET_DIMS, height_tol=height_tol, density_tol=density_tol
+        super_items_pool, configuration.PALLET_DIMS, height_tol=height_tol, density_tol=density_tol
     )
     # If no height groups are identified fallback to one group
     if len(height_groups) == 0:
         logger.debug(f"MR found no height groups, falling back to standard procedure")
-        height_groups = [superitems_pool]
+        height_groups = [super_items_pool]
     # Initial empty layer pool
-    mr_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS)
+    mr_layer_pool = layers.LayerPool(super_items_pool, configuration.PALLET_DIMS)
 
     # Call maxrects for each height group and merge all the layer pools
     for i, spool in enumerate(height_groups):
         logger.info(f"MR processing height group {i + 1}/{len(height_groups)}")
         layer_pool = maxrects.maxrects_multiple_layers(
-            spool, config.PALLET_DIMS, add_single=add_single
+            spool, configuration.PALLET_DIMS, add_single=add_single
         )
         mr_layer_pool.extend(layer_pool)
     logger.info(f"MR generated {len(mr_layer_pool)} layers")
@@ -68,7 +76,7 @@ def maxrects_warm_start(superitems_pool, height_tol=0, density_tol=0.5, add_sing
 
 
 def cg(
-    superitems_pool,
+    super_items_pool,
     height_tol=0,
     density_tol=0.5,
     use_height_groups=True,
@@ -88,24 +96,24 @@ def cg(
     logger.info("CG computing layers")
 
     # Initialize final layer pool
-    cg_layer_pool = layers.LayerPool(superitems_pool, config.PALLET_DIMS)
+    cg_layer_pool = layers.LayerPool(super_items_pool, configuration.PALLET_DIMS)
 
     # Process superitems all together or by dividing them into height groups
     if use_height_groups:
         height_groups = get_height_groups(
-            superitems_pool,
-            config.PALLET_DIMS,
+            super_items_pool,
+            configuration.PALLET_DIMS,
             height_tol=height_tol,
             density_tol=density_tol,
         )
         # If no height groups are identified fallback to one group
         if len(height_groups) == 0:
             logger.debug(f"CG found no height groups, falling back to standard procedure")
-            height_groups = [superitems_pool]
+            height_groups = [super_items_pool]
     else:
-        height_groups = [superitems_pool]
+        height_groups = [super_items_pool]
 
-    # Iterate over each height group (or the entire superitems pool)
+    # Iterate over each height group (or the entire super_items pool)
     # and call the column generation procedure for each one
     for i, spool in enumerate(height_groups):
         logger.info(f"CG processing height group {i + 1}/{len(height_groups)}")
@@ -117,12 +125,14 @@ def cg(
                 spool, height_tol=height_tol, density_tol=density_tol
             )
         else:
-            warm_start_layer_pool = layers.LayerPool(spool, config.PALLET_DIMS, add_single=True)
+            warm_start_layer_pool = layers.LayerPool(
+                spool, configuration.PALLET_DIMS, add_single=True
+            )
 
         # Call the column generation procedure
         layer_pool, _ = column_generation.column_generation(
             warm_start_layer_pool,
-            config.PALLET_DIMS,
+            configuration.PALLET_DIMS,
             max_iter=max_iters,
             max_stag_iters=max_stag_iters,
             tlim=tlim,
@@ -160,16 +170,14 @@ def main(
     cg_sp_p_type="cp",
     cg_return_only_last=False,
 ):
-    """
-    External interface to all the implemented solutions to solve 3D-BPP
-    """
+    """External interface to all the implemented solutions to solve 3D-BPP."""
     assert max_iters > 0, "The number of maximum iteration must be > 0"
     assert procedure in ("mr", "bl", "cg"), "Unsupported procedure"
 
     logger.info(f"{procedure.upper()} procedure starting")
 
     # Create the final superitems pool and a copy of the order
-    final_layer_pool = layers.LayerPool(superitems.SuperitemPool(), config.PALLET_DIMS)
+    final_layer_pool = layers.LayerPool(superitems.SuperitemPool(), configuration.PALLET_DIMS)
     working_order = order.copy()
 
     # Iterate the specified number of times in order to reduce
@@ -181,7 +189,7 @@ def main(
         # Create the superitems pool and call the baseline procedure
         superitems_list, singles_removed = superitems.SuperitemPool.gen_superitems(
             order=working_order,
-            pallet_dims=config.PALLET_DIMS,
+            pallet_dims=configuration.PALLET_DIMS,
             max_vstacked=superitems_max_vstacked,
             horizontal=superitems_horizontal,
             horizontal_type=superitems_horizontal_type,
@@ -191,7 +199,7 @@ def main(
 
         # Call the right packing procedure
         if procedure == "bl":
-            layer_pool = baseline.baseline(superitems_pool, config.PALLET_DIMS, tlim=tlim)
+            layer_pool = baseline.baseline(superitems_pool, configuration.PALLET_DIMS, tlim=tlim)
         elif procedure == "mr":
             layer_pool = maxrects_warm_start(
                 superitems_pool, height_tol=height_tol, density_tol=density_tol, add_single=False
@@ -239,6 +247,6 @@ def main(
     # Build a pool of bins from the layer pool and compact
     # all layers in each bin to avoid having "flying" products
     bin_pool = bins.BinPool(
-        final_layer_pool, config.PALLET_DIMS, singles_removed=set(all_singles_removed)
+        final_layer_pool, configuration.PALLET_DIMS, singles_removed=set(all_singles_removed)
     )
     return bins.CompactBinPool(bin_pool)
