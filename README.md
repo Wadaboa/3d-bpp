@@ -15,7 +15,7 @@ This repository contains different implementations of heuristics-based and mathe
 
 All solutions are based on the concept of layers, which are collections of items having similar heights (within a pre-specified tolerance) that are thus having the same base z-coordinate. Using layers we are able to relax the 3D problem to a set of 2D ones, boosting efficiency-related metrics. Moreover, the usage of superitems (i.e. compounding similar items together in a bigger item) enables us to both lower the amount of items we are effectively dealing with and also to maximize layer density, thanks to the compact stacking of items in a superitem.
 
-The bins building procedure is always handled in a procedural way, stacking layers on top of each other until a bin is full and opening new bins as needed. Before layers are placed in a bin, they are filtered based on a set of criteria (as described in [^1], such as item coverage and layer density. After layers are placed in a bin, some items could still be "flying" (i.e. have zero support at their base): to solve this issue, we let items "fall" to the ground as much as possible, without allowing intersections, thus ensuring compactness and correctness.
+The bins building procedure is always handled in a procedural way, stacking layers on top of each other until a bin is full and opening new bins as needed. Before layers are placed in a bin, they are filtered based on a set of criteria (as described in [^1]), such as item coverage and layer density. After layers are placed in a bin, some items could still be "flying" (i.e. have zero support at their base): to solve this issue, we let items "fall" to the ground as much as possible, without allowing intersections, thus ensuring compactness and correctness.
 
 ## Dataset
 
@@ -184,15 +184,14 @@ python3 -m streamlit run src/dashboard.py
 To start the slide show:
 
 1. Change directory to `slides/`
-1. Run `npm install` and `npm run dev`
-1. Visit [http://localhost:3030](http://localhost:3030)
+2. Run `npm install` and `npm run dev`
+3. Visit [http://localhost:3030](http://localhost:3030)
 
 Edit the [slides.md](./slides/slides.md) to see the changes.
 
 Learn more about Slidev on [documentations](https://sli.dev/).
 
-_[MIP]: Mixed-Integer Programming
-_[CP]: Constraint Programming \*[3D-BPP]: Three-Dimensional Bin Packing Problem
+*[MIP]: Mixed-Integer Programming
 
 ## References
 
