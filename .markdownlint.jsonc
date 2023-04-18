@@ -10,7 +10,10 @@
   },
   "no-inline-html": {
     "allowed_elements": [
-      "style"
+      "p",
+      "picture",
+      "img",
+      "source"
     ]
   }
 }

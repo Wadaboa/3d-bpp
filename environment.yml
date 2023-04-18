@@ -1,4 +1,4 @@
-name: 3d-bpp
+name: d3-bpp
 
 dependencies:
   - pip
